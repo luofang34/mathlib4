@@ -436,12 +436,80 @@ theorem cayleyTransformCLM_isometry (hA : IsSelfAdjoint A) :
 /-- The range of the Cayley transform is dense. -/
 theorem cayleyTransformCLM_range_dense (hA : IsSelfAdjoint A) :
     Dense (Set.range (cayleyTransformCLM hA)) := by
-  sorry
+  -- Rewrite as density of the linear submodule
+  rw [show Set.range (cayleyTransformCLM hA) =
+      (LinearMap.range (cayleyTransformCLM hA).toLinearMap : Set E) from
+      (LinearMap.coe_range _).symm]
+  rw [Submodule.dense_iff_topologicalClosure_eq_top,
+      Submodule.topologicalClosure_eq_top_iff, Submodule.eq_bot_iff]
+  intro y hy
+  -- hy : y ∈ (LinearMap.range (cayleyTransformCLM hA).toLinearMap)ᗮ
+  -- Step 1: V(addI A x) = subI A x for all x : A.domain
+  have hVaddI : ∀ x : A.domain, cayleyTransformCLM hA (addI A x) = subI A x := fun x => by
+    change subI A ⟨resolventCLM hA (addI A x), resolventCLM_mem_domain hA _⟩ = subI A x
+    congr 1
+    -- Goal: ⟨resolventCLM hA (addI A x), _⟩ = x  (as A.domain elements)
+    have hinj : Function.Injective (addI A).toFun :=
+      LinearMap.ker_eq_bot.mp (addI_ker_eq_bot hA)
+    apply hinj
+    -- Goal: (addI A).toFun ⟨resolventCLM hA (addI A x), _⟩ = (addI A).toFun x
+    simp only [LinearPMap.toFun_eq_coe, addI_resolventCLM hA]
+  -- Step 2: ∀ x : A.domain, ⟪y, subI A x⟫ = 0
+  have horth : ∀ x : A.domain, ⟪y, subI A x⟫ = 0 := by
+    intro x
+    have hmem : cayleyTransformCLM hA (addI A x) ∈
+        (LinearMap.range (cayleyTransformCLM hA).toLinearMap : Submodule ℂ E) :=
+      LinearMap.mem_range_self _ _
+    rw [hVaddI x] at hmem
+    exact (Submodule.mem_orthogonal' _ y).mp hy _ hmem
+  -- Step 3: ⟪y, Ax⟫ = I•⟪y, x⟫ for all x : A.domain
+  have hinner : ∀ x : A.domain, ⟪y, A x⟫ = Complex.I * ⟪y, (x : E)⟫ := by
+    intro x
+    have h := horth x
+    rw [subI_apply, inner_add_right, inner_smul_right] at h
+    linear_combination h
+  -- Step 4: Show y ∈ A†.domain using w = -I•y
+  have hy_dom : y ∈ A†.domain := by
+    apply LinearPMap.mem_adjoint_domain_of_exists
+    refine ⟨-Complex.I • y, fun x => ?_⟩
+    simp only [inner_smul_left, conj_neg_I, hinner x]
+  -- Step 5: Apply adjoint_apply_eq to get A†⟨y, hy_dom⟩ = -I•y
+  have hAstary : A† ⟨y, hy_dom⟩ = -Complex.I • y := by
+    apply LinearPMap.adjoint_apply_eq hA.dense_domain ⟨y, hy_dom⟩
+    intro x
+    simp only [inner_smul_left, conj_neg_I, hinner x]
+  -- Step 6: Transport to get Ay = -I•y
+  have heq : A† = A := isSelfAdjoint_def.mp hA
+  have hy_A : y ∈ A.domain := heq ▸ hy_dom
+  have hAy : A ⟨y, hy_A⟩ = -Complex.I • y :=
+    ((LinearPMap.ext_iff.mp heq).2 (hf := hy_dom) (hg := hy_A)).symm.trans hAstary
+  -- Step 7: (A + iI)y = I•y + (-I•y) = 0
+  have haddI : addI A ⟨y, hy_A⟩ = 0 := by
+    rw [addI_apply, hAy, ← add_smul]
+    simp
+  -- Step 8: By addI_norm_ge, ‖y‖ = 0, so y = 0
+  have hnorm : ‖(y : E)‖ ≤ 0 :=
+    (addI_norm_ge hA ⟨y, hy_A⟩).trans (by rw [haddI, norm_zero])
+  exact norm_eq_zero.mp (le_antisymm hnorm (norm_nonneg _))
 
-/-- The Cayley transform is surjective. -/
+/-- The Cayley transform is surjective.
+
+The Cayley transform is a linear isometry (cayleyTransformCLM_isometry), hence has closed range
+(Isometry.isClosedEmbedding). Its range is also dense (cayleyTransformCLM_range_dense).
+A closed dense set equals the whole space, so V is surjective. -/
 theorem cayleyTransformCLM_surjective (hA : IsSelfAdjoint A) :
     Function.Surjective (cayleyTransformCLM hA) := by
-  sorry
+  -- The isometry has closed range
+  have hclosed : _root_.IsClosed (Set.range (cayleyTransformCLM hA)) :=
+    (cayleyTransformCLM_isometry hA).isClosedEmbedding.isClosed_range
+  -- The range is dense
+  have hdense : Dense (Set.range (cayleyTransformCLM hA)) :=
+    cayleyTransformCLM_range_dense hA
+  -- Dense + closed = everything
+  have huniv : Set.range (cayleyTransformCLM hA) = Set.univ := by
+    rw [dense_iff_closure_eq] at hdense
+    rwa [hclosed.closure_eq] at hdense
+  rwa [← Set.range_eq_univ]
 
 /-- The Cayley transform is unitary. -/
 theorem cayleyTransformCLM_isUnitary (hA : IsSelfAdjoint A) :
