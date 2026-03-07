@@ -137,14 +137,45 @@ theorem graph_zero_mem (f : ConjLinearPMap E) : (0 : E × E) ∈ f.graph :=
 -- Closability criterion
 -- ═══════════════════════════════════════════════════════
 
-/-- A conjugate-linear partial map is closable if whenever (0, y) is in the
-closure of its graph, then y = 0.
+/-- Forward direction: if f is closable, then (0, y) in the closure of the
+graph implies y = 0.
 
-This is the standard closability criterion: if x_n → 0 and f(x_n) → y,
-then y = 0. -/
+Proof: closable means closure(graph) = graph(g). If (0, y) ∈ graph(g), then
+g(0) = y, but g(0) = 0 by conjugate-linearity. -/
+theorem isClosable_graph_closure_zero (f : ConjLinearPMap E)
+    (hf : f.IsClosable) : ∀ y : E, (0, y) ∈ closure f.graph → y = 0 := by
+  intro y hy
+  obtain ⟨g, hg⟩ := hf
+  rw [hg] at hy
+  obtain ⟨x, hx⟩ := hy
+  have hx_zero : (x : E) = 0 := (Prod.mk.inj hx).1
+  have : x = ⟨0, by rw [← hx_zero]; exact x.2⟩ := Subtype.ext hx_zero
+  rw [this] at hx
+  have := (Prod.mk.inj hx).2
+  rw [← this]
+  exact g.map_zero'
+
+/-- Converse: if (0, y) ∈ closure(graph(f)) implies y = 0, then f is closable.
+
+The proof constructs a ConjLinearPMap whose graph equals the closure of f.graph.
+The condition ensures the closure is "functional" (single-valued). -/
+theorem closable_of_graph_closure_zero (f : ConjLinearPMap E)
+    (h : ∀ y : E, (0, y) ∈ closure f.graph → y = 0) : f.IsClosable := by
+  sorry
+  -- PROOF SKETCH:
+  -- 1. Let C = closure(f.graph). C is closed in E × E.
+  -- 2. C is an additive subgroup (closure of additive subgroup).
+  -- 3. C is "functional": if (x, y₁) ∈ C and (x, y₂) ∈ C, then
+  --    (0, y₁ - y₂) ∈ C, so y₁ = y₂ by hypothesis h.
+  -- 4. Define domain(g) = π₁(C) as a submodule of E.
+  -- 5. Define g(x) = unique y with (x, y) ∈ C.
+  -- 6. Show g is conjugate-linear (inherits from f via limits).
+  -- 7. Then closure(f.graph) = C = graph(g). ∎
+
+/-- The closability criterion: f is closable iff (0, y) ∈ closure(graph) implies y = 0. -/
 theorem isClosable_iff_graph_closure_zero (f : ConjLinearPMap E) :
-    f.IsClosable ↔ ∀ y : E, (0, y) ∈ closure f.graph → y = 0 := by
-  sorry -- Standard result, proof requires working with closure + graph structure
+    f.IsClosable ↔ ∀ y : E, (0, y) ∈ closure f.graph → y = 0 :=
+  ⟨f.isClosable_graph_closure_zero, f.closable_of_graph_closure_zero⟩
 
 -- ═══════════════════════════════════════════════════════
 -- Involutive operators
@@ -156,13 +187,91 @@ def IsInvolutive (f : ConjLinearPMap E) : Prop :=
   ∀ (x : f.domain) (hfx : (f x : E) ∈ f.domain),
     f.toFun ⟨f x, hfx⟩ = (x : E)
 
-/-- If S is involutive and densely defined, then S is closable.
+/-- A conjugate-linear partial map has a densely defined formal adjoint if
+there exists g : ConjLinearPMap E with dense domain such that
+⟨f(x), y⟩ = conj(⟨x, g(y)⟩) for all x ∈ dom(f), y ∈ dom(g).
 
-This is a key theorem for Tomita-Takesaki theory: the Tomita operator
-S(aΩ) = a*Ω is involutive (since (a*)* = a), and this implies closability. -/
-theorem IsInvolutive.isClosable (f : ConjLinearPMap E) (hf : f.IsInvolutive)
-    (hd : f.IsDenselyDefined) : f.IsClosable := by
-  sorry -- Proof: if (0, y) ∈ closure(graph(f)), use involutivity to show y = 0
+This is the correct general criterion for closability of antilinear operators.
+For the Tomita operator S, the formal adjoint is F (Tomita operator for M'). -/
+def HasDenselyDefinedFormalAdjoint (f : ConjLinearPMap E) : Prop :=
+  ∃ g : ConjLinearPMap E, g.IsDenselyDefined ∧
+    ∀ (x : f.domain) (y : g.domain),
+      @inner ℂ E _ (f x) (↑y) = starRingEnd ℂ (@inner ℂ E _ (↑x) (g y))
+
+/-- An antilinear operator with a densely defined formal adjoint is closable.
+
+This is the standard closability criterion used in Tomita-Takesaki theory.
+The Tomita operator S for M has formal adjoint F (Tomita operator for M'),
+which is densely defined because Ω is cyclic for M' (equivalently, separating for M). -/
+theorem HasDenselyDefinedFormalAdjoint.isClosable (f : ConjLinearPMap E)
+    (hf : f.HasDenselyDefinedFormalAdjoint) : f.IsClosable := by
+  rw [isClosable_iff_graph_closure_zero]
+  intro y hy
+  obtain ⟨g, hg_dense, hg_adj⟩ := hf
+  -- Goal: y = 0. Strategy: show ⟨y, w⟩ = 0 for all w in the dense set dom(g).
+  apply hg_dense.eq_zero_of_inner_left (𝕜 := ℂ)
+  intro w hw
+  -- Show ⟨y, w⟩ = 0. Suffices to show ‖⟨y, w⟩‖ ≤ ε for all ε > 0.
+  rw [← norm_eq_zero]
+  apply le_antisymm _ (norm_nonneg _)
+  rw [← not_lt]
+  intro h_pos
+  -- (0, y) ∈ closure(graph) gives approximation
+  set C := ‖w‖ + ‖g.toFun ⟨w, hw⟩‖ + 1 with hC_def
+  have hC_pos : C > 0 := by positivity
+  have hε : ‖@inner ℂ E _ y w‖ / C > 0 := div_pos h_pos hC_pos
+  obtain ⟨p, hp_mem, hp_dist⟩ := Metric.mem_closure_iff.mp hy (‖@inner ℂ E _ y w‖ / C) hε
+  obtain ⟨x, hx⟩ := hp_mem
+  -- p = (↑x, f(x)) and dist p (0, y) < ε
+  have hx1 : p.1 = (↑x : E) := by rw [← hx]
+  have hx2 : p.2 = f.toFun x := by rw [← hx]
+  -- ‖↑x‖ < ε and ‖f(x) - y‖ < ε (from product distance = max)
+  set ε := ‖@inner ℂ E _ y w‖ / C with hε_def
+  have h_x_bound : ‖(↑x : E)‖ < ε := by
+    have h1 : dist p.1 (0 : E) ≤ dist p (0, y) := by
+      simp only [Prod.dist_eq]; exact le_max_left _ _
+    have h2 : ‖(↑x : E)‖ = dist p.1 (0 : E) := by
+      rw [hx1]; simp [dist_zero_right]
+    rw [h2]; exact lt_of_le_of_lt h1 (by rwa [dist_comm] at hp_dist)
+  have h_fx_bound : ‖(f.toFun x : E) - y‖ < ε := by
+    have h1 : dist p.2 y ≤ dist p (0, y) := by
+      simp only [Prod.dist_eq]; exact le_max_right _ _
+    have h2 : ‖(f.toFun x : E) - y‖ = dist p.2 y := by
+      rw [hx2]; simp [dist_eq_norm]
+    rw [h2]; exact lt_of_le_of_lt h1 (by rwa [dist_comm] at hp_dist)
+  -- ⟨y, w⟩ = ⟨y - f(x), w⟩ + ⟨f(x), w⟩
+  --        = ⟨y - f(x), w⟩ + conj(⟨↑x, g(w)⟩)  [formal adjoint]
+  have h_adj : @inner ℂ E _ (f.toFun x) w =
+      starRingEnd ℂ (@inner ℂ E _ (↑x : E) (g.toFun ⟨w, hw⟩)) :=
+    hg_adj x ⟨w, hw⟩
+  have h_split : @inner ℂ E _ y w = @inner ℂ E _ (y - (f.toFun x : E)) w +
+      starRingEnd ℂ (@inner ℂ E _ (↑x : E) (g.toFun ⟨w, hw⟩)) := by
+    rw [← h_adj, inner_sub_left, sub_add_cancel]
+  -- |⟨y, w⟩| ≤ |⟨y - f(x), w⟩| + |⟨↑x, g(w)⟩|
+  have h_bound : ‖@inner ℂ E _ y w‖ ≤
+      ‖y - (f.toFun x : E)‖ * ‖w‖ + ‖(↑x : E)‖ * ‖g.toFun ⟨w, hw⟩‖ := by
+    rw [h_split]
+    calc ‖@inner ℂ E _ (y - (f.toFun x : E)) w +
+            starRingEnd ℂ (@inner ℂ E _ (↑x : E) (g.toFun ⟨w, hw⟩))‖
+        ≤ ‖@inner ℂ E _ (y - (f.toFun x : E)) w‖ +
+            ‖starRingEnd ℂ (@inner ℂ E _ (↑x : E) (g.toFun ⟨w, hw⟩))‖ := norm_add_le _ _
+      _ = ‖@inner ℂ E _ (y - (f.toFun x : E)) w‖ +
+            ‖@inner ℂ E _ (↑x : E) (g.toFun ⟨w, hw⟩)‖ := by
+          rw [RCLike.norm_conj]
+      _ ≤ _ := add_le_add (norm_inner_le_norm _ _) (norm_inner_le_norm _ _)
+  -- ‖⟨y, w⟩‖ ≤ ε·‖w‖ + ε·‖g(w)‖ < ε·C = ‖⟨y, w⟩‖, contradiction
+  linarith [
+    calc ‖y - (f.toFun x : E)‖ * ‖w‖
+        ≤ ε * ‖w‖ := by
+          rw [norm_sub_rev] at h_fx_bound
+          exact mul_le_mul_of_nonneg_right (le_of_lt h_fx_bound) (norm_nonneg _),
+    calc ‖(↑x : E)‖ * ‖g.toFun ⟨w, hw⟩‖
+        ≤ ε * ‖g.toFun ⟨w, hw⟩‖ := by exact mul_le_mul_of_nonneg_right (le_of_lt h_x_bound) (norm_nonneg _),
+    show ε * (‖w‖ + ‖g.toFun ⟨w, hw⟩‖) < ε * C from by
+      apply mul_lt_mul_of_pos_left _ hε
+      linarith [norm_nonneg w, norm_nonneg (g.toFun ⟨w, hw⟩)],
+    show ε * C = ‖@inner ℂ E _ y w‖ from by
+      rw [hε_def]; exact div_mul_cancel₀ _ (ne_of_gt hC_pos)]
 
 end ConjLinearPMap
 
