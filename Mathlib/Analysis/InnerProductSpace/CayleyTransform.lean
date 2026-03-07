@@ -185,21 +185,123 @@ theorem addI_ker_eq_bot (hA : IsSelfAdjoint A) : (addI A).toFun.ker = ⊥ := by
 /-- The range of `(A + iI)` is closed.
 
 Follows from the antilipschitz condition `‖(A + iI)x‖ ≥ ‖x‖` and closedness of A.
-The precise argument: if `(A + iI)xₙ → y`, the norm bound implies `{xₙ}` is Cauchy,
-so `xₙ → x` for some x. Since `A` is closed (self-adjoint ↔ closed), `Axₙ → Ax`,
-so `(A + iI)xₙ → (A + iI)x = y`. -/
+We define Φ : ↥A.graph → E by Φ(x, Ax) = i·x + Ax = (A+iI)x. Since A.graph is complete
+(A is closed by self-adjointness) and Φ is 1-antilipschitz, its range is closed. -/
 theorem addI_range_isClosed (hA : IsSelfAdjoint A) :
     _root_.IsClosed (LinearMap.range (addI A).toFun : Set E) := by
-  sorry
+  -- A.graph is complete (closed subspace of E × E, as A is closed)
+  haveI : CompleteSpace ↥A.graph := hA.isClosed.completeSpace_coe
+  -- Define Φ : ↥A.graph →L[ℂ] E by Φ(p) = I·p.1 + p.2
+  let Φ : ↥A.graph →L[ℂ] E :=
+    Complex.I • (ContinuousLinearMap.fst ℂ E E).comp A.graph.subtypeL +
+    (ContinuousLinearMap.snd ℂ E E).comp A.graph.subtypeL
+  -- Φ is 1-antilipschitz: ‖p - q‖ ≤ ‖Φ p - Φ q‖
+  have hanti : AntilipschitzWith 1 Φ := by
+    rw [antilipschitzWith_iff_le_mul_dist]
+    intro p q
+    simp only [NNReal.coe_one, one_mul]
+    rw [dist_eq_norm, dist_eq_norm]
+    -- Extract the graph witness for p - q
+    obtain ⟨w, hw1, hw2⟩ := (LinearPMap.mem_graph_iff A).mp (p - q).2
+    -- Compute Φ(p - q) = I·(p-q).1 + (p-q).2 = I·↑w + Aw = addI A w
+    have hΦ : Φ (p - q) = addI A w := by
+      have heq1 : ((p - q : ↥A.graph) : E × E).1 = (w : E) := hw1.symm
+      have heq2 : ((p - q : ↥A.graph) : E × E).2 = A w := hw2.symm
+      simp only [Φ, ContinuousLinearMap.add_apply, ContinuousLinearMap.smul_apply,
+        ContinuousLinearMap.comp_apply, Submodule.subtypeL_apply,
+        ContinuousLinearMap.coe_fst', ContinuousLinearMap.coe_snd', heq1, heq2,
+        Function.comp, addI_apply]
+    -- ‖p - q‖ = max ‖↑w‖ ‖Aw‖
+    have hnorm_pq : ‖p - q‖ = max ‖(w : E)‖ ‖A w‖ := by
+      simp only [Submodule.coe_norm, Prod.norm_def]
+      rw [show ((p - q : ↥A.graph) : E × E).1 = (w : E) from hw1.symm]
+      rw [show ((p - q : ↥A.graph) : E × E).2 = A w from hw2.symm]
+    -- ‖addI A w‖ ≥ max ‖↑w‖ ‖Aw‖
+    have hge : max ‖(w : E)‖ ‖A w‖ ≤ ‖addI A w‖ := by
+      rw [max_le_iff]
+      have hsq : ‖addI A w‖ ^ 2 = ‖A w‖ ^ 2 + ‖(w : E)‖ ^ 2 := norm_addI_sq hA w
+      constructor
+      · exact addI_norm_ge hA w
+      · nlinarith [sq_nonneg ‖(w : E)‖, sq_nonneg ‖A w‖, sq_nonneg ‖addI A w‖,
+                   norm_nonneg (A w), norm_nonneg (addI A w)]
+    -- ‖p - q‖ ≤ ‖Φ(p - q)‖ = ‖Φ p - Φ q‖
+    calc ‖p - q‖ = max ‖(w : E)‖ ‖A w‖ := hnorm_pq
+      _ ≤ ‖addI A w‖ := hge
+      _ = ‖Φ (p - q)‖ := (congrArg norm hΦ.symm)
+      _ = ‖Φ p - Φ q‖ := congrArg norm (Φ.map_sub p q)
+  -- Set.range Φ = LinearMap.range (addI A).toFun
+  have hrange : Set.range Φ = (LinearMap.range (addI A).toFun : Set E) := by
+    ext y
+    simp only [Set.mem_range, LinearMap.mem_range]
+    constructor
+    · rintro ⟨p, rfl⟩
+      obtain ⟨w, hw1, hw2⟩ := (LinearPMap.mem_graph_iff A).mp p.2
+      refine ⟨w, ?_⟩
+      have hΦp : Φ p = Complex.I • (p : E × E).1 + (p : E × E).2 := by
+        simp only [Φ, ContinuousLinearMap.add_apply, ContinuousLinearMap.smul_apply,
+          ContinuousLinearMap.comp_apply, Submodule.subtypeL_apply,
+          ContinuousLinearMap.coe_fst', ContinuousLinearMap.coe_snd', Function.comp]
+      have : Φ p = addI A w := by
+        rw [hΦp, hw1.symm, hw2.symm, addI_apply]
+      exact (LinearPMap.toFun_eq_coe (addI A) w).trans this.symm
+    · rintro ⟨x, hx⟩
+      refine ⟨⟨((x : E), A x), LinearPMap.mem_graph A x⟩, ?_⟩
+      have : Φ ⟨((x : E), A x), LinearPMap.mem_graph A x⟩ = addI A x := by
+        simp only [Φ, ContinuousLinearMap.add_apply, ContinuousLinearMap.smul_apply,
+          ContinuousLinearMap.comp_apply, Submodule.subtypeL_apply,
+          ContinuousLinearMap.coe_fst', ContinuousLinearMap.coe_snd', Function.comp]
+        exact (addI_apply x).symm
+      rw [this]
+      exact (LinearPMap.toFun_eq_coe _ _).symm.trans hx
+  rw [← hrange]
+  exact hanti.isClosed_range Φ.uniformContinuous
 
 /-- The range of `(A + iI)` is dense in E.
 
 Proof: If y ⊥ range(A + iI), then for all x ∈ dom(A), `⟪y, (A + iI)x⟫ = 0`.
-This gives `⟪y, Ax⟫ = -i⟪y, x⟫`, showing y ∈ dom(A†) = dom(A) and A†y = -iy.
+This gives `⟪y, Ax⟫ = -i⟪y, x⟫`, showing y ∈ dom(A†) = dom(A) and A†y = iy.
 Since A† = A, (A - iI)y = 0. But `‖(A - iI)y‖ ≥ ‖y‖`, so y = 0. -/
 theorem addI_range_dense (hA : IsSelfAdjoint A) :
     Dense (LinearMap.range (addI A).toFun : Set E) := by
-  sorry
+  rw [Submodule.dense_iff_topologicalClosure_eq_top,
+      Submodule.topologicalClosure_eq_top_iff, Submodule.eq_bot_iff]
+  intro y hy
+  -- hy : y ∈ (LinearMap.range (addI A).toFun)ᗮ
+  -- Step 1: For any x : A.domain, ⟪y, (A+iI)x⟫ = 0
+  have horth : ∀ x : A.domain, ⟪y, addI A x⟫ = 0 := by
+    intro x
+    have hmem : addI A x ∈ (LinearMap.range (addI A).toFun : Submodule ℂ E) :=
+      LinearMap.mem_range_self (addI A).toFun x
+    exact (Submodule.mem_orthogonal' _ y).mp hy _ hmem
+  -- Step 2: From orthogonality: ⟪y, Ax⟫ = -I * ⟪y, x⟫ for all x : A.domain
+  have hinner : ∀ x : A.domain, ⟪y, A x⟫ = -Complex.I * ⟪y, (x : E)⟫ := by
+    intro x
+    have h := horth x
+    rw [addI_apply, inner_add_right, inner_smul_right] at h
+    linear_combination h
+  -- Step 3: Show y ∈ A†.domain using w = I•y
+  have hy_dom : y ∈ A†.domain := by
+    apply LinearPMap.mem_adjoint_domain_of_exists
+    refine ⟨Complex.I • y, fun x => ?_⟩
+    simp only [inner_smul_left, Complex.conj_I, hinner x]
+  -- Step 4: Apply adjoint_apply_eq to get A†⟨y, hy_dom⟩ = I•y
+  have hAstary : A† ⟨y, hy_dom⟩ = Complex.I • y := by
+    apply LinearPMap.adjoint_apply_eq hA.dense_domain ⟨y, hy_dom⟩
+    intro x
+    simp only [inner_smul_left, Complex.conj_I, hinner x]
+  -- Step 5: Transport to get A⟨y, hy_A⟩ = I•y
+  have heq : A† = A := isSelfAdjoint_def.mp hA
+  have hy_A : y ∈ A.domain := heq ▸ hy_dom
+  have hAy : A ⟨y, hy_A⟩ = Complex.I • y :=
+    ((LinearPMap.ext_iff.mp heq).2 (hf := hy_dom) (hg := hy_A)).symm.trans hAstary
+  -- Step 6: (A - iI)y = -I•y + I•y = 0
+  have hsubI : subI A ⟨y, hy_A⟩ = 0 := by
+    rw [subI_apply, hAy, ← add_smul]
+    simp
+  -- Step 7: By subI_norm_ge, ‖y‖ = 0, so y = 0
+  have hnorm : ‖(y : E)‖ ≤ 0 :=
+    (subI_norm_ge hA ⟨y, hy_A⟩).trans (by rw [hsubI, norm_zero])
+  exact norm_eq_zero.mp (le_antisymm hnorm (norm_nonneg _))
 
 /-- The range of `(A + iI)` equals all of E.
 Since the range is closed (sorry'd) and dense (sorry'd), it equals ⊤. -/
@@ -223,21 +325,52 @@ variable {A : E →ₗ.[ℂ] E}
 
 Since `(A + iI)` is bijective (injective by norm bound, surjective because range = E)
 and `‖(A + iI)x‖ ≥ ‖x‖`, the inverse is bounded with `‖(A + iI)⁻¹‖ ≤ 1`. -/
-def resolventCLM (hA : IsSelfAdjoint A) : E →L[ℂ] E := by
-  sorry
+-- The linear equivalence `(addI A).domain ≃ₗ[ℂ] E` from bijectivity of `(addI A).toFun`.
+private noncomputable def resolventEquiv (hA : IsSelfAdjoint A) :
+    (addI A).domain ≃ₗ[ℂ] E :=
+  LinearEquiv.ofBijective (addI A).toFun
+    ⟨LinearMap.ker_eq_bot.mp (addI_ker_eq_bot hA),
+     LinearMap.range_eq_top.mp (addI_range_eq_top hA)⟩
+
+def resolventCLM (hA : IsSelfAdjoint A) : E →L[ℂ] E :=
+  (A.domain.subtype.comp (resolventEquiv hA).symm.toLinearMap).mkContinuous 1 fun y => by
+    simp only [LinearMap.comp_apply, Submodule.subtype_apply, one_mul]
+    -- ‖((resolventEquiv hA).symm y : E)‖ ≤ ‖y‖
+    -- Let x := (resolventEquiv hA).symm y : (addI A).domain = A.domain
+    set x := (resolventEquiv hA).symm y with hx_def
+    -- hbnd : ‖(x : E)‖ ≤ ‖addI A x‖
+    have hbnd : ‖(x : E)‖ ≤ ‖addI A x‖ := addI_norm_ge hA x
+    -- heq : addI A x = y (as elements of E)
+    have heq : addI A x = y := by
+      -- addI A x = (addI A).toFun x = resolventEquiv hA (resolventEquiv hA).symm y = y
+      change (addI A).toFun x = y
+      simp [hx_def, resolventEquiv, LinearEquiv.ofBijective]
+    calc ‖(x : E)‖ ≤ ‖addI A x‖ := hbnd
+      _ = ‖y‖ := by rw [heq]
 
 theorem resolventCLM_norm_le (hA : IsSelfAdjoint A) : ‖resolventCLM hA‖ ≤ 1 := by
-  sorry
+  apply LinearMap.mkContinuous_norm_le
+  exact zero_le_one
 
 /-- The image of `resolventCLM` lands in `A.domain`. -/
 theorem resolventCLM_mem_domain (hA : IsSelfAdjoint A) (y : E) :
     resolventCLM hA y ∈ A.domain := by
-  sorry
+  simp only [resolventCLM, LinearMap.mkContinuous_apply, LinearMap.comp_apply,
+             Submodule.subtype_apply]
+  exact ((resolventEquiv hA).symm y).2
 
 /-- The defining property: `(A + iI)(resolventCLM y) = y`. -/
 theorem addI_resolventCLM (hA : IsSelfAdjoint A) (y : E) :
     addI A ⟨resolventCLM hA y, resolventCLM_mem_domain hA y⟩ = y := by
-  sorry
+  simp only [resolventCLM, LinearMap.mkContinuous_apply, LinearMap.comp_apply,
+             Submodule.subtype_apply]
+  -- After simp: addI A ⟨((resolventEquiv hA).symm y : E), _⟩ = y
+  -- which is addI A ((resolventEquiv hA).symm y) = y
+  -- i.e. (addI A).toFun ((resolventEquiv hA).symm y) = y
+  have : (addI A).toFun ((resolventEquiv hA).symm y) = y := by
+    simp [resolventEquiv, LinearEquiv.ofBijective]
+  rw [LinearPMap.toFun_eq_coe] at this
+  convert this using 2
 
 end ResolventMap
 
@@ -251,10 +384,31 @@ variable {A : E →ₗ.[ℂ] E}
 
 For y ∈ E, let x = (A + iI)⁻¹ y ∈ dom(A). Then V(y) = (A - iI)(x). -/
 def cayleyTransformCLM (hA : IsSelfAdjoint A) : E →L[ℂ] E :=
-  { toFun := fun y => subI A ⟨resolventCLM hA y, resolventCLM_mem_domain hA y⟩
-    map_add' := by intro x y; sorry
-    map_smul' := by intro c x; sorry
-    cont := by sorry }
+  LinearMap.mkContinuous
+    { toFun := fun y => subI A ⟨resolventCLM hA y, resolventCLM_mem_domain hA y⟩
+      map_add' := by
+        intro x y
+        have hx : resolventCLM hA x ∈ A.domain := resolventCLM_mem_domain hA x
+        have hy : resolventCLM hA y ∈ A.domain := resolventCLM_mem_domain hA y
+        rw [← LinearPMap.map_add (subI A) ⟨resolventCLM hA x, hx⟩ ⟨resolventCLM hA y, hy⟩]
+        congr 1; ext1
+        simp [(resolventCLM hA).map_add]
+      map_smul' := by
+        intro c x
+        simp only [RingHom.id_apply]
+        have hx : resolventCLM hA x ∈ A.domain := resolventCLM_mem_domain hA x
+        rw [← LinearPMap.map_smul (subI A) c ⟨resolventCLM hA x, hx⟩]
+        congr 1; ext1
+        simp [(resolventCLM hA).map_smul] }
+    1
+    (fun y => by
+      simp only [LinearMap.coe_mk, AddHom.coe_mk, one_mul]
+      set x := resolventCLM hA y
+      have hxd : x ∈ A.domain := resolventCLM_mem_domain hA y
+      have hy : addI A ⟨x, hxd⟩ = y := addI_resolventCLM hA y
+      have heq : ‖subI A ⟨x, hxd⟩‖ = ‖y‖ :=
+        ((addI_norm_eq_subI_norm hA ⟨x, hxd⟩).symm.trans (by rw [hy]))
+      linarith [norm_nonneg y])
 
 /-- The Cayley transform preserves norms: `‖Vy‖ = ‖y‖`.
 
@@ -292,7 +446,21 @@ theorem cayleyTransformCLM_surjective (hA : IsSelfAdjoint A) :
 /-- The Cayley transform is unitary. -/
 theorem cayleyTransformCLM_isUnitary (hA : IsSelfAdjoint A) :
     (cayleyTransformCLM hA) ∈ unitary (E →L[ℂ] E) := by
-  sorry
+  -- Build a linear isometry from the norm identity
+  let φ : E →ₗᵢ[ℂ] E :=
+    { (cayleyTransformCLM hA).toLinearMap with
+      norm_map' := cayleyTransformCLM_norm_eq hA }
+  -- Use surjectivity to get a linear isometry equivalence
+  let Φ : E ≃ₗᵢ[ℂ] E := LinearIsometryEquiv.ofSurjective φ (cayleyTransformCLM_surjective hA)
+  -- Show the underlying CLM of Φ equals cayleyTransformCLM hA
+  have hcoe : (Φ : E →L[ℂ] E) = cayleyTransformCLM hA := by
+    ext y
+    have hfun := LinearIsometryEquiv.coe_ofSurjective φ (cayleyTransformCLM_surjective hA)
+    exact congr_fun hfun y
+  -- Use the membership of the symm element and transfer via hcoe
+  have hmem : (Unitary.linearIsometryEquiv.symm Φ : E →L[ℂ] E) ∈ unitary (E →L[ℂ] E) :=
+    (Unitary.linearIsometryEquiv.symm Φ).property
+  rwa [Unitary.coe_symm_linearIsometryEquiv_apply, hcoe] at hmem
 
 end CayleyTransform
 
