@@ -49,19 +49,32 @@ Constructed as an opaque constant to avoid coercion issues. -/
 def boundedIntegral (f : ℝ → ℂ) : H →L[ℂ] H :=
   boundedIntegral_aux P f
 
-/-- The domain of the unbounded integral: {x ∈ H | ∫ |f|² dμ_x < ∞}. -/
+/-- The domain of the unbounded integral: {x ∈ H | sup_n ‖∫ f·1_{|f|≤n} dP x‖ < ∞}.
+
+The carrier is the set of vectors x for which the truncated spectral integrals
+are uniformly bounded. For the identity function f(t) = t, this recovers the domain
+of a self-adjoint operator. -/
 def unboundedDomain (f : ℝ → ℂ) : Submodule ℂ H where
-  carrier := {x : H | Summable (fun n => ‖P.proj (Set.Icc n (n+1)) x‖ ^ 2 *
-    ⨆ (t : ℝ) (_ : t ∈ Set.Icc (n : ℝ) (n+1)), ‖f t‖ ^ 2)}
-  zero_mem' := by simp
+  carrier := {x : H | BddAbove (Set.range (fun n : ℕ =>
+    ‖P.boundedIntegral (fun t => if ‖f t‖ ≤ n then f t else 0) x‖))}
+  zero_mem' := ⟨0, by rintro _ ⟨n, rfl⟩; simp [map_zero]⟩
   add_mem' := by
-    intro x y hx hy
-    -- ‖P(B)(x+y)‖² ≤ 2(‖P(B)x‖² + ‖P(B)y‖²) via triangle inequality
-    sorry
+    intro x y ⟨Bx, hBx⟩ ⟨By, hBy⟩
+    refine ⟨Bx + By, ?_⟩
+    rintro _ ⟨n, rfl⟩
+    calc ‖(P.boundedIntegral _) (x + y)‖
+        = ‖(P.boundedIntegral _) x + (P.boundedIntegral _) y‖ := by
+          rw [ContinuousLinearMap.map_add]
+      _ ≤ ‖(P.boundedIntegral _) x‖ + ‖(P.boundedIntegral _) y‖ := norm_add_le _ _
+      _ ≤ Bx + By := add_le_add (hBx ⟨n, rfl⟩) (hBy ⟨n, rfl⟩)
   smul_mem' := by
-    intro c x hx
-    -- P(B)(c•x) = c•P(B)x, so ‖·‖² scales by |c|²
-    sorry
+    intro c x ⟨B, hB⟩
+    refine ⟨‖c‖ * B, ?_⟩
+    rintro _ ⟨n, rfl⟩
+    calc ‖(P.boundedIntegral _) (c • x)‖
+        = ‖c • (P.boundedIntegral _) x‖ := by rw [ContinuousLinearMap.map_smul]
+      _ = ‖c‖ * ‖(P.boundedIntegral _) x‖ := norm_smul _ _
+      _ ≤ ‖c‖ * B := mul_le_mul_of_nonneg_left (hB ⟨n, rfl⟩) (norm_nonneg _)
 
 /-- The unbounded integral ∫ f dP as a partially defined linear map.
 
