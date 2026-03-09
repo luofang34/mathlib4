@@ -56,13 +56,11 @@ def unboundedDomain (f : ℝ → ℂ) : Submodule ℂ H where
   zero_mem' := by simp
   add_mem' := by
     intro x y hx hy
-    simp only [Set.mem_setOf_eq] at *
-    -- Use: ‖P(B)(x+y)‖ ≤ ‖P(B)x‖ + ‖P(B)y‖, then (a+b)² ≤ 2(a²+b²)
+    -- ‖P(B)(x+y)‖² ≤ 2(‖P(B)x‖² + ‖P(B)y‖²) via triangle inequality
     sorry
   smul_mem' := by
     intro c x hx
-    simp only [Set.mem_setOf_eq] at *
-    -- P(B)(c•x) = c•P(B)x, so ‖P(B)(c•x)‖² = |c|²·‖P(B)x‖²
+    -- P(B)(c•x) = c•P(B)x, so ‖·‖² scales by |c|²
     sorry
 
 /-- The unbounded integral ∫ f dP as a partially defined linear map.
