@@ -103,12 +103,23 @@ We decompose as `U(t) x = U(t)(x - x₀) + U(t) x₀`. The second term converges
 `U(t₀) x₀` by strong continuity; the first term has norm `‖x - x₀‖ → 0` by the
 isometry property, but completing the full argument requires more care. -/
 theorem continuous_apply : Continuous (fun tx : ℝ × H => U.toFun tx.1 tx.2) := by
-  /- Proof sketch:
-     Write U(t) x - U(t₀) x₀ = U(t)(x - x₀) + (U(t) x₀ - U(t₀) x₀).
-     The first part has norm ‖x - x₀‖ by isometry.
-     The second part → 0 by strong continuity.
-     Full joint continuity requires combining these estimates carefully. -/
-  sorry
+  rw [Metric.continuous_iff]
+  intro ⟨t₀, x₀⟩ ε hε
+  obtain ⟨δ₁, hδ₁pos, hδ₁⟩ := Metric.continuousAt_iff.mp
+    (U.stronglyContinuous x₀).continuousAt (ε / 2) (half_pos hε)
+  refine ⟨min δ₁ (ε / 2), lt_min hδ₁pos (half_pos hε), fun ⟨t, x⟩ htx => ?_⟩
+  rw [Prod.dist_eq] at htx
+  have ht : dist t t₀ < δ₁ :=
+    (max_lt_iff.mp (lt_of_lt_of_le htx (min_le_left _ _))).1
+  have hx : dist x x₀ < ε / 2 :=
+    (max_lt_iff.mp (lt_of_lt_of_le htx (min_le_right _ _))).2
+  calc dist (U.toFun t x) (U.toFun t₀ x₀)
+      ≤ dist (U.toFun t x) (U.toFun t x₀) + dist (U.toFun t x₀) (U.toFun t₀ x₀) :=
+        dist_triangle _ _ _
+    _ = dist x x₀ + dist (U.toFun t x₀) (U.toFun t₀ x₀) := by
+        rw [(U.isometry t).dist_eq]
+    _ < ε / 2 + ε / 2 := add_lt_add hx (hδ₁ ht)
+    _ = ε := add_halves ε
 
 end StronglyContUnitaryGroup
 
