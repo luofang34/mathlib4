@@ -40,7 +40,7 @@ analogous infrastructure for the conjugate-linear case needed for TT theory.
 
 noncomputable section
 
-open RCLike
+open RCLike Topology
 
 variable {E : Type*} [NormedAddCommGroup E] [InnerProductSpace ℂ E] [CompleteSpace E]
 
@@ -155,22 +155,129 @@ theorem isClosable_graph_closure_zero (f : ConjLinearPMap E)
   rw [← this]
   exact g.map_zero'
 
-/-- Converse: if (0, y) ∈ closure(graph(f)) implies y = 0, then f is closable.
+/-- The closure of the graph is closed under addition. -/
+private theorem closure_graph_add_mem (f : ConjLinearPMap E) {p q : E × E}
+    (hp : p ∈ closure f.graph) (hq : q ∈ closure f.graph) :
+    p + q ∈ closure f.graph := by
+  -- The map (a, b) ↦ a + b sends graph × graph into graph
+  set φ : (E × E) × (E × E) → E × E := fun ab => ab.1 + ab.2
+  have hφ_image : φ '' (f.graph ×ˢ f.graph) ⊆ f.graph := by
+    rintro _ ⟨⟨a, b⟩, ⟨ha, hb⟩, rfl⟩
+    exact f.graph_add_mem ha hb
+  -- (p, q) ∈ closure(graph) × closure(graph) = closure(graph × graph)
+  have h_prod : (p, q) ∈ closure (f.graph ×ˢ f.graph) := by
+    rw [closure_prod_eq]; exact ⟨hp, hq⟩
+  -- φ continuous → φ '' closure ⊆ closure(φ '' ...)
+  have hφ_cont : Continuous φ := continuous_add
+  have := image_closure_subset_closure_image hφ_cont
+    (Set.mem_image_of_mem φ h_prod)
+  exact closure_mono hφ_image this
 
-The proof constructs a ConjLinearPMap whose graph equals the closure of f.graph.
-The condition ensures the closure is "functional" (single-valued). -/
+/-- The graph is closed under negation. -/
+private theorem graph_neg_mem (f : ConjLinearPMap E) {p : E × E}
+    (hp : p ∈ f.graph) : -p ∈ f.graph := by
+  obtain ⟨x, hx⟩ := hp
+  have hx_neg : -(x : E) ∈ f.domain := f.domain.neg_mem x.2
+  refine ⟨⟨-(x : E), hx_neg⟩, ?_⟩
+  have : (⟨-(x : E), hx_neg⟩ : f.domain) = -x := Subtype.ext (by simp)
+  rw [← hx, this, map_neg]
+  simp [Prod.neg_mk]
+
+/-- The closure of the graph is closed under negation. -/
+private theorem closure_graph_neg_mem' (f : ConjLinearPMap E) {p : E × E}
+    (hp : p ∈ closure f.graph) : -p ∈ closure f.graph := by
+  have hφ : Neg.neg '' f.graph ⊆ f.graph := by
+    intro q ⟨r, hr, hrq⟩
+    rw [← hrq]; exact graph_neg_mem f hr
+  have h1 : -p ∈ Neg.neg '' closure f.graph := ⟨p, hp, rfl⟩
+  have h2 : Neg.neg '' closure f.graph ⊆ closure (Neg.neg '' f.graph) :=
+    image_closure_subset_closure_image continuous_neg
+  exact closure_mono hφ (h2 h1)
+
+/-- The closure of the graph is closed under conjugate scalar multiplication. -/
+private theorem closure_graph_conj_smul_mem (f : ConjLinearPMap E) (c : ℂ) {p : E × E}
+    (hp : p ∈ closure f.graph) :
+    (c • p.1, (starRingEnd ℂ c) • p.2) ∈ closure f.graph := by
+  -- The map φ(x, y) = (c•x, c̄•y) is continuous
+  set φ : E × E → E × E := fun q => (c • q.1, (starRingEnd ℂ c) • q.2)
+  have hφ_cont : Continuous φ :=
+    continuous_prodMk.2 ⟨continuous_fst.const_smul c,
+      continuous_snd.const_smul (starRingEnd ℂ c)⟩
+  -- φ maps f.graph into f.graph
+  have hφ_graph : φ '' f.graph ⊆ f.graph := by
+    rintro _ ⟨r, ⟨x, rfl⟩, rfl⟩
+    refine ⟨⟨c • (x : E), f.domain.smul_mem c x.2⟩, ?_⟩
+    have heq : (⟨c • (x : E), f.domain.smul_mem c x.2⟩ : f.domain) = c • x :=
+      Subtype.ext rfl
+    rw [heq, map_conj_smul]; rfl
+  -- φ p ∈ φ '' closure(graph) ⊆ closure(φ '' graph) ⊆ closure(graph)
+  have h1 : φ p ∈ φ '' closure f.graph := Set.mem_image_of_mem φ hp
+  have h2 : φ '' closure f.graph ⊆ closure (φ '' f.graph) :=
+    image_closure_subset_closure_image hφ_cont
+  exact closure_mono hφ_graph (h2 h1)
+
+/-- The closure of the graph is "functional" when the graph closure condition holds:
+if (x, y₁) and (x, y₂) are both in the closure, then y₁ = y₂. -/
+private theorem closure_graph_functional (f : ConjLinearPMap E)
+    (h : ∀ y : E, (0, y) ∈ closure f.graph → y = 0)
+    {x y₁ y₂ : E} (h₁ : (x, y₁) ∈ closure f.graph) (h₂ : (x, y₂) ∈ closure f.graph) :
+    y₁ = y₂ := by
+  have h_neg : -(x, y₂) ∈ closure f.graph := closure_graph_neg_mem' f h₂
+  have h_sum : (x, y₁) + -(x, y₂) ∈ closure f.graph := closure_graph_add_mem f h₁ h_neg
+  simp only [Prod.mk_add_mk, Prod.neg_mk, add_neg_cancel] at h_sum
+  have h_eq := h (y₁ + -y₂) h_sum
+  rwa [add_neg_eq_zero] at h_eq
+
 theorem closable_of_graph_closure_zero (f : ConjLinearPMap E)
     (h : ∀ y : E, (0, y) ∈ closure f.graph → y = 0) : f.IsClosable := by
-  sorry
-  -- PROOF SKETCH:
-  -- 1. Let C = closure(f.graph). C is closed in E × E.
-  -- 2. C is an additive subgroup (closure of additive subgroup).
-  -- 3. C is "functional": if (x, y₁) ∈ C and (x, y₂) ∈ C, then
-  --    (0, y₁ - y₂) ∈ C, so y₁ = y₂ by hypothesis h.
-  -- 4. Define domain(g) = π₁(C) as a submodule of E.
-  -- 5. Define g(x) = unique y with (x, y) ∈ C.
-  -- 6. Show g is conjugate-linear (inherits from f via limits).
-  -- 7. Then closure(f.graph) = C = graph(g). ∎
+  -- Define the domain as the projection of the closure
+  set C := closure f.graph with hC_def
+  -- The domain: {x : E | ∃ y, (x, y) ∈ C}
+  set dom : Submodule ℂ E :=
+    { carrier := {x : E | ∃ y, (x, y) ∈ C}
+      zero_mem' := ⟨0, subset_closure (f.graph_zero_mem)⟩
+      add_mem' := by
+        intro a b ⟨ya, ha⟩ ⟨yb, hb⟩
+        exact ⟨ya + yb, by
+          have := closure_graph_add_mem f ha hb
+          simpa using this⟩
+      smul_mem' := by
+        intro c x ⟨y, hy⟩
+        exact ⟨(starRingEnd ℂ c) • y, closure_graph_conj_smul_mem f c hy⟩ } with hdom_def
+  -- For each x in dom, choose the unique y with (x, y) ∈ C
+  have h_exists : ∀ x : dom, ∃ y : E, ((x : E), y) ∈ C := fun x => x.2
+  -- Define the map using Classical.choose
+  set g_fun : dom → E := fun x => Classical.choose (h_exists x) with hg_fun
+  have hg_spec : ∀ x : dom, ((x : E), g_fun x) ∈ C :=
+    fun x => Classical.choose_spec (h_exists x)
+  -- g_fun is conjugate-linear
+  have hg_add : ∀ (x y : dom), g_fun (x + y) = g_fun x + g_fun y := by
+    intro x y
+    have h1 := hg_spec x
+    have h2 := hg_spec y
+    have h_sum := closure_graph_add_mem f h1 h2
+    have h3 := hg_spec (x + y)
+    exact closure_graph_functional f h h3 (by simpa using h_sum)
+  have hg_smul : ∀ (c : ℂ) (x : dom), g_fun (c • x) = (starRingEnd ℂ c) • g_fun x := by
+    intro c x
+    have h1 := hg_spec x
+    have h_sc := closure_graph_conj_smul_mem f c h1
+    have h2 := hg_spec (c • x)
+    exact closure_graph_functional f h h2 h_sc
+  -- Package as ConjLinearPMap
+  refine ⟨⟨dom, ⟨⟨g_fun, hg_add⟩, hg_smul⟩⟩, ?_⟩
+  -- Show closure f.graph = g.graph
+  ext ⟨a, b⟩
+  constructor
+  · intro hab
+    have ha_dom : a ∈ dom := ⟨b, hab⟩
+    exact ⟨⟨a, ha_dom⟩, Prod.ext rfl (closure_graph_functional f h (hg_spec ⟨a, ha_dom⟩) hab)⟩
+  · intro ⟨x, hx⟩
+    have := hg_spec x
+    have hxa : (x : E) = a := (Prod.mk.inj hx).1
+    have hxb : g_fun x = b := (Prod.mk.inj hx).2
+    rw [← hxa, ← hxb]
+    exact this
 
 /-- The closability criterion: f is closable iff (0, y) ∈ closure(graph) implies y = 0. -/
 theorem isClosable_iff_graph_closure_zero (f : ConjLinearPMap E) :
