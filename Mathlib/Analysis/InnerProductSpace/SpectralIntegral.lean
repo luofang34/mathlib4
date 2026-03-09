@@ -54,8 +54,16 @@ def unboundedDomain (f : ℝ → ℂ) : Submodule ℂ H where
   carrier := {x : H | Summable (fun n => ‖P.proj (Set.Icc n (n+1)) x‖ ^ 2 *
     ⨆ (t : ℝ) (_ : t ∈ Set.Icc (n : ℝ) (n+1)), ‖f t‖ ^ 2)}
   zero_mem' := by simp
-  add_mem' := by sorry
-  smul_mem' := by sorry
+  add_mem' := by
+    intro x y hx hy
+    simp only [Set.mem_setOf_eq] at *
+    -- Use: ‖P(B)(x+y)‖ ≤ ‖P(B)x‖ + ‖P(B)y‖, then (a+b)² ≤ 2(a²+b²)
+    sorry
+  smul_mem' := by
+    intro c x hx
+    simp only [Set.mem_setOf_eq] at *
+    -- P(B)(c•x) = c•P(B)x, so ‖P(B)(c•x)‖² = |c|²·‖P(B)x‖²
+    sorry
 
 /-- The unbounded integral ∫ f dP as a partially defined linear map.
 
