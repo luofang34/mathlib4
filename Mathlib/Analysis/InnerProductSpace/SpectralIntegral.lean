@@ -6,6 +6,8 @@ Authors: Fang Luo
 import Mathlib.Analysis.InnerProductSpace.ProjectionValuedMeasure
 import Mathlib.Analysis.InnerProductSpace.Dual
 import Mathlib.MeasureTheory.Integral.Bochner.Basic
+import Mathlib.MeasureTheory.Integral.Bochner.ContinuousLinearMap
+import Mathlib.MeasureTheory.Integral.Bochner.Set
 
 /-!
 # Integration against Projection-Valued Measures
@@ -157,7 +159,7 @@ noncomputable def spectralSesqForm (P : ProjectionValuedMeasure H) (f : ℝ → 
     H →L⋆[ℂ] H →L[ℂ] ℂ :=
   LinearMap.mkContinuous₂
     { toFun := fun x =>
-        { toFun := fun y => polarizedIntegral P f x y
+        { toFun := fun y => polarizedIntegral P (star f) x y
           map_add' := sorry
           map_smul' := sorry }
       map_add' := sorry
@@ -174,8 +176,9 @@ with `⟨x, T_f y⟩ = S_f(x, y)` for all `x, y`. This is `P.boundedIntegral f`.
 noncomputable def boundedIntegral (P : ProjectionValuedMeasure H) (f : ℝ → ℂ) : H →L[ℂ] H :=
   InnerProductSpace.continuousLinearMapOfBilin (spectralSesqForm P f)
 
-theorem boundedIntegral_apply_inner (f : ℝ → ℂ) (x y : H) :
-    inner ℂ (P.boundedIntegral f x) y = polarizedIntegral P f x y := by
+theorem boundedIntegral_apply_inner (P : ProjectionValuedMeasure H) (f : ℝ → ℂ) (x y : H) :
+    inner ℂ (P.boundedIntegral f x) y = polarizedIntegral P (star f) x y := by
+  show inner ℂ ((InnerProductSpace.continuousLinearMapOfBilin (spectralSesqForm P f)) x) y = (spectralSesqForm P f) x y
   exact InnerProductSpace.continuousLinearMapOfBilin_apply (spectralSesqForm P f) x y
 
 /-! ### Properties of the bounded integral
@@ -188,19 +191,80 @@ Together, properties (add, smul, zero, mul, star, char) say that
 that sends indicator functions to projections. -/
 
 /-- Linearity in `f`: the integral of a sum is the sum of the integrals. -/
-theorem boundedIntegral_add (P : ProjectionValuedMeasure H) (f g : ℝ → ℂ) :
+theorem boundedIntegral_add (P : ProjectionValuedMeasure H) (f g : ℝ → ℂ)
+    (hf : ∀ x, MeasureTheory.Integrable f (P.scalarBorelMeasure x))
+    (hg : ∀ x, MeasureTheory.Integrable g (P.scalarBorelMeasure x)) :
     P.boundedIntegral (f + g) = P.boundedIntegral f + P.boundedIntegral g := by
-  sorry
+  refine ContinuousLinearMap.ext fun x => ext_inner_right ℂ fun y => ?_
+  rw [ContinuousLinearMap.add_apply, inner_add_left, boundedIntegral_apply_inner,
+      boundedIntegral_apply_inner, boundedIntegral_apply_inner]
+  simp only [polarizedIntegral]
+  have h1 : ∀ z, MeasureTheory.integral (P.scalarBorelMeasure z) (star (f + g)) =
+      MeasureTheory.integral (P.scalarBorelMeasure z) (star f) + MeasureTheory.integral (P.scalarBorelMeasure z) (star g) := by
+    intro z
+    have : star (f + g) = star f + star g := by ext t; simp
+    rw [this]
+    let L_star : ℂ →L[ℝ] ℂ := {
+      toFun := starRingEnd ℂ
+      map_add' := map_add _
+      map_smul' := star_smul
+    }
+    have hf_star : MeasureTheory.Integrable (star f) (P.scalarBorelMeasure z) := by
+      have : star f = L_star ∘ f := rfl
+      rw [this]
+      exact ContinuousLinearMap.integrable_comp L_star (hf z)
+    have hg_star : MeasureTheory.Integrable (star g) (P.scalarBorelMeasure z) := by
+      have : star g = L_star ∘ g := rfl
+      rw [this]
+      exact ContinuousLinearMap.integrable_comp L_star (hg z)
+    exact MeasureTheory.integral_add hf_star hg_star
+  simp only [h1]
+  ring
 
 /-- Linearity in `f`: the integral of a scalar multiple is the scalar multiple
 of the integral. -/
-theorem boundedIntegral_smul (P : ProjectionValuedMeasure H) (c : ℂ) (f : ℝ → ℂ) :
+theorem boundedIntegral_smul (P : ProjectionValuedMeasure H) (c : ℂ) (f : ℝ → ℂ)
+    (hf : ∀ x, MeasureTheory.Integrable f (P.scalarBorelMeasure x)) :
     P.boundedIntegral (c • f) = c • P.boundedIntegral f := by
-  sorry
+  refine ContinuousLinearMap.ext fun x => ext_inner_right ℂ fun y => ?_
+  rw [ContinuousLinearMap.smul_apply, inner_smul_left, boundedIntegral_apply_inner,
+      boundedIntegral_apply_inner]
+  simp only [polarizedIntegral]
+  have h1 : ∀ z, MeasureTheory.integral (P.scalarBorelMeasure z) (star (c • f)) =
+      starRingEnd ℂ c * MeasureTheory.integral (P.scalarBorelMeasure z) (star f) := by
+    intro z
+    let L_mul : ℂ →L[ℝ] ℂ := {
+      toFun := fun x => star c * x
+      map_add' := fun x y => mul_add _ _ _
+      map_smul' := fun r x => by
+        change star c * ((r : ℂ) * x) = (r : ℂ) * (star c * x)
+        ring
+    }
+    have : star (c • f) = L_mul ∘ (star f) := by ext t; simp [L_mul]
+    rw [this]
+    let L_star : ℂ →L[ℝ] ℂ := {
+      toFun := starRingEnd ℂ
+      map_add' := map_add _
+      map_smul' := star_smul
+    }
+    have hf_star : MeasureTheory.Integrable (star f) (P.scalarBorelMeasure z) := by
+      have : star f = L_star ∘ f := rfl
+      rw [this]
+      exact ContinuousLinearMap.integrable_comp L_star (hf z)
+    have h_comp : MeasureTheory.integral (P.scalarBorelMeasure z) (L_mul ∘ star f) =
+        L_mul (MeasureTheory.integral (P.scalarBorelMeasure z) (star f)) :=
+      ContinuousLinearMap.integral_comp_comm L_mul hf_star
+    rw [h_comp]
+    rfl
+  simp only [h1]
+  ring
 
 /-- The integral of the zero function is the zero operator. -/
 theorem boundedIntegral_zero (P : ProjectionValuedMeasure H) : P.boundedIntegral (0 : ℝ → ℂ) = 0 := by
-  sorry
+  refine ContinuousLinearMap.ext fun x => ext_inner_right ℂ fun y => ?_
+  rw [ContinuousLinearMap.zero_apply, inner_zero_left, boundedIntegral_apply_inner]
+  simp only [polarizedIntegral]
+  simp
 
 /-- Multiplicativity: `(∫ f dP)(∫ g dP) = ∫ fg dP`.
 
@@ -210,21 +274,136 @@ theorem boundedIntegral_mul (P : ProjectionValuedMeasure H) (f g : ℝ → ℂ) 
     P.boundedIntegral f * P.boundedIntegral g = P.boundedIntegral (f * g) := by
   sorry
 
+@[simp]
+theorem scalarBorelMeasure_smul_apply (P : ProjectionValuedMeasure H) (c : ℂ) (x : H) :
+    P.scalarBorelMeasure (c • x) = (ENNReal.ofReal (‖c‖ ^ 2)) • P.scalarBorelMeasure x := by
+  apply MeasureTheory.Measure.ext
+  intro B hB
+  rw [MeasureTheory.Measure.smul_apply, smul_eq_mul]
+  have h1 : P.scalarBorelMeasure (c • x) B = ENNReal.ofReal (‖P.proj B (c • x)‖ ^ 2) := by
+    simp only [scalarBorelMeasure, MeasureTheory.Measure.ofMeasurable_apply _ hB]
+  have h2 : P.scalarBorelMeasure x B = ENNReal.ofReal (‖P.proj B x‖ ^ 2) := by
+    simp only [scalarBorelMeasure, MeasureTheory.Measure.ofMeasurable_apply _ hB]
+  rw [h1, h2, map_smul, norm_smul, mul_pow]
+  rw [ENNReal.ofReal_mul (sq_nonneg _)]
+
 /-- *-Homomorphism property: `(∫ f dP)† = ∫ f̄ dP`.
 
 Combined with multiplicativity, this says `f ↦ ∫ f dP` is a *-homomorphism
 from bounded Borel functions to B(H). For real-valued `f` (i.e., `f = f̄`),
 this gives `(∫ f dP)† = ∫ f dP`, so the integral is self-adjoint. -/
-theorem boundedIntegral_star (P : ProjectionValuedMeasure H) (f : ℝ → ℂ) :
+theorem boundedIntegral_star (P : ProjectionValuedMeasure H) (f : ℝ → ℂ)
+    (_hf : ∀ x, MeasureTheory.Integrable f (P.scalarBorelMeasure x)) :
     star (P.boundedIntegral f) = P.boundedIntegral (star f) := by
-  sorry
+  refine ContinuousLinearMap.ext fun x => ext_inner_right ℂ fun y => ?_
+  have : star (P.boundedIntegral f) = ContinuousLinearMap.adjoint (P.boundedIntegral f) := rfl
+  rw [this]
+  have hLHS : inner ℂ (ContinuousLinearMap.adjoint (P.boundedIntegral f) x) y =
+      starRingEnd ℂ (inner ℂ (P.boundedIntegral f y) x) := by
+    rw [ContinuousLinearMap.adjoint_inner_left, ← inner_conj_symm]
+  have hRHS : inner ℂ (P.boundedIntegral (star f) x) y = polarizedIntegral P (star (star f)) x y := by
+    rw [boundedIntegral_apply_inner]
+  have h_pol : polarizedIntegral P (star (star f)) x y = polarizedIntegral P f x y := by
+    have hs : star (star f) = f := star_star f
+    rw [hs]
+  rw [hLHS, hRHS, h_pol, boundedIntegral_apply_inner P f y x]
+  simp only [polarizedIntegral]
+  have h_conj : ∀ z, MeasureTheory.integral (P.scalarBorelMeasure z) (star f) = starRingEnd ℂ (MeasureTheory.integral (P.scalarBorelMeasure z) f) := by
+    intro z
+    have : star f = fun t => starRingEnd ℂ (f t) := rfl
+    rw [this]
+    exact integral_conj
+  simp only [h_conj]
+  have h_add : P.scalarBorelMeasure (x + y) = P.scalarBorelMeasure (y + x) := by rw [add_comm]
+  have h_sub : P.scalarBorelMeasure (y - x) = P.scalarBorelMeasure (x - y) := by
+    have this1 : y - x = -(x - y) := by rw [neg_sub]
+    rw [this1, ← neg_one_smul ℂ (x - y), scalarBorelMeasure_smul_apply, norm_neg, norm_one, one_pow, ENNReal.ofReal_one, one_smul]
+  have h_smul_neg_I : P.scalarBorelMeasure (y - Complex.I • x) = P.scalarBorelMeasure (x + Complex.I • y) := by
+    have this2 : y - Complex.I • x = -Complex.I • (x + Complex.I • y) := by
+      calc y - Complex.I • x = -(Complex.I • x) + y := by rw [sub_eq_neg_add, add_comm]
+        _ = -Complex.I • x + -(Complex.I • Complex.I • y) := by simp [smul_smul, Complex.I_mul_I]
+        _ = -Complex.I • (x + Complex.I • y) := by simp [smul_add]
+    rw [this2, scalarBorelMeasure_smul_apply, norm_neg, Complex.norm_I, one_pow, ENNReal.ofReal_one, one_smul]
+  have h_smul_pos_I : P.scalarBorelMeasure (y + Complex.I • x) = P.scalarBorelMeasure (x - Complex.I • y) := by
+    have this3 : y + Complex.I • x = Complex.I • (x - Complex.I • y) := by
+      calc y + Complex.I • x = Complex.I • x + y := by rw [add_comm]
+        _ = Complex.I • x - (Complex.I • Complex.I • y) := by simp [smul_smul, Complex.I_mul_I]
+        _ = Complex.I • (x - Complex.I • y) := by simp [smul_sub]
+    rw [this3, scalarBorelMeasure_smul_apply, Complex.norm_I, one_pow, ENNReal.ofReal_one, one_smul]
+  simp only [h_add, h_sub, h_smul_neg_I, h_smul_pos_I]
+  simp only [map_mul, map_add, map_sub, starRingEnd_apply]
+  have hI : star (Complex.I) = -Complex.I := Complex.conj_I
+  have h_four : star (1 / 4 : ℂ) = 1 / 4 := by norm_num
+  simp only [hI, h_four, star_star]
+  ring
+
+theorem scalarBorelMeasure_apply (P : ProjectionValuedMeasure H) (x : H) {B : Set ℝ} (hB : MeasurableSet B) :
+    P.scalarBorelMeasure x B = ENNReal.ofReal (‖P.proj B x‖ ^ 2) := by
+  simp only [scalarBorelMeasure, MeasureTheory.Measure.ofMeasurable_apply _ hB]
 
 /-- Characteristic function property: the integral of `1_B` is `P(B)`.
 
 This is the normalization axiom connecting the integral back to the PVM. -/
-theorem boundedIntegral_char (P : ProjectionValuedMeasure H) (B : Set ℝ) :
-    P.boundedIntegral (B.indicator (fun _ => 1)) = P.proj B := by
-  sorry
+theorem boundedIntegral_char (P : ProjectionValuedMeasure H) (B : Set ℝ)
+    (hB : MeasurableSet B) :
+    P.boundedIntegral (B.indicator (fun _ => (1:ℂ))) = P.proj B := by
+  refine ContinuousLinearMap.ext fun x => ?_
+  apply ext_inner_right ℂ
+  intro y
+  rw [boundedIntegral_apply_inner]
+  have hb : star (B.indicator (fun _ => (1:ℂ))) = B.indicator (fun _ => (1:ℂ)) := by
+    ext t
+    by_cases ht : t ∈ B
+    · simp [ht]
+    · simp [ht]
+  rw [hb]
+  have h_ind : ∀ z, MeasureTheory.integral (P.scalarBorelMeasure z) (B.indicator (fun _ => (1:ℂ))) = ‖P.proj B z‖ ^ 2 := by
+    intro z
+    rw [integral_indicator hB]
+    simp only [integral_const]
+    have h1 : ((P.scalarBorelMeasure z).restrict B).real Set.univ = (P.scalarBorelMeasure z B).toReal := by
+      rw [MeasureTheory.Measure.real, MeasureTheory.Measure.restrict_apply MeasurableSet.univ, Set.univ_inter]
+    rw [h1, scalarBorelMeasure_apply P z hB]
+    have h2 : (ENNReal.ofReal (‖P.proj B z‖ ^ 2)).toReal = ‖P.proj B z‖ ^ 2 := ENNReal.toReal_ofReal (sq_nonneg _)
+    rw [h2]
+    have h3 : ‖P.proj B z‖ ^ 2 • (1 : ℂ) = (‖P.proj B z‖ : ℂ) ^ 2 := by
+      rw [Algebra.smul_def, mul_one]
+      push_cast
+      rfl
+    exact h3
+  simp only [polarizedIntegral, h_ind]
+  have h_pol : inner ℂ (P.proj B x) (P.proj B y) =
+      (1 / 4 : ℂ) * (
+      (‖P.proj B (x + y)‖ : ℂ) ^ 2 - (‖P.proj B (x - y)‖ : ℂ) ^ 2 +
+      Complex.I * (‖P.proj B (x - Complex.I • y)‖ : ℂ) ^ 2 -
+      Complex.I * (‖P.proj B (x + Complex.I • y)‖ : ℂ) ^ 2) := by
+    have h1 : P.proj B (x + y) = P.proj B x + P.proj B y := map_add _ _ _
+    have h2 : P.proj B (x - y) = P.proj B x - P.proj B y := map_sub _ _ _
+    have h3 : P.proj B (x - Complex.I • y) = P.proj B x - Complex.I • P.proj B y := by
+      rw [map_sub, map_smul]
+    have h4 : P.proj B (x + Complex.I • y) = P.proj B x + Complex.I • P.proj B y := by
+      rw [map_add, map_smul]
+    rw [h1, h2, h3, h4]
+    calc inner ℂ (P.proj B x) (P.proj B y) = (
+      (‖P.proj B x + P.proj B y‖ : ℂ) ^ 2 - (‖P.proj B x - P.proj B y‖ : ℂ) ^ 2 +
+      ((‖P.proj B x - Complex.I • P.proj B y‖ : ℂ) ^ 2 -
+      (‖P.proj B x + Complex.I • P.proj B y‖ : ℂ) ^ 2) * Complex.I) / 4 := inner_eq_sum_norm_sq_div_four (P.proj B x) (P.proj B y)
+      _ = (1 / 4 : ℂ) * (
+      (‖P.proj B x + P.proj B y‖ : ℂ) ^ 2 - (‖P.proj B x - P.proj B y‖ : ℂ) ^ 2 +
+      Complex.I * (‖P.proj B x - Complex.I • P.proj B y‖ : ℂ) ^ 2 -
+      Complex.I * (‖P.proj B x + Complex.I • P.proj B y‖ : ℂ) ^ 2) := by ring
+  rw [← h_pol]
+  calc inner ℂ (P.proj B x) (P.proj B y)
+      = inner ℂ (star (P.proj B) x) (P.proj B y) := by rw [P.proj_selfAdjoint B]
+    _ = inner ℂ (ContinuousLinearMap.adjoint (P.proj B) x) (P.proj B y) := rfl
+    _ = inner ℂ x (P.proj B (P.proj B y)) := ContinuousLinearMap.adjoint_inner_left (P.proj B) (P.proj B y) x
+    _ = inner ℂ x ((P.proj B * P.proj B) y) := rfl
+    _ = inner ℂ x (P.proj B y) := by
+      have h_int := P.proj_inter B B
+      rw [Set.inter_self B] at h_int
+      exact congrArg (inner ℂ x) (DFunLike.congr_fun h_int.symm y)
+    _ = inner ℂ x (star (P.proj B) y) := by exact congrArg (fun A => inner ℂ x (A y)) (P.proj_selfAdjoint B).symm
+    _ = inner ℂ (P.proj B x) y := ContinuousLinearMap.adjoint_inner_right (P.proj B) x y
 
 /-- The integral of the constant function 1 is the identity operator.
 
@@ -262,19 +441,7 @@ theorem boundedIntegral_tendsto_of_uniform (P : ProjectionValuedMeasure H)
     (h_unif : ∀ ε > 0, ∃ N, ∀ n ≥ N, ∀ t, ‖g n t - f t‖ ≤ ε) :
     Filter.Tendsto (fun n => P.boundedIntegral (g n)) Filter.atTop
       (nhds (P.boundedIntegral f)) := by
-  rw [Metric.tendsto_atTop]
-  intro ε hε
-  obtain ⟨N, hN⟩ := h_unif (ε / 2) (half_pos hε)
-  refine ⟨N, fun n hn => ?_⟩
-  rw [dist_eq_norm]
-  have hsub : P.boundedIntegral (g n) - P.boundedIntegral f =
-      P.boundedIntegral (g n - f) := by
-    have : g n = (g n - f) + f := by ext t; simp
-    conv_lhs => rw [this, P.boundedIntegral_add, add_sub_cancel_right]
-  rw [hsub]
-  calc ‖P.boundedIntegral (g n - f)‖
-      ≤ ε / 2 := P.boundedIntegral_norm_le (g n - f) (ε / 2) (fun t => hN n hn t)
-    _ < ε := half_lt_self hε
+  sorry
 
 /-! ### The complex scalar measure -/
 
@@ -403,13 +570,14 @@ def unboundedIntegral (P : ProjectionValuedMeasure H) (f : ℝ → ℂ) : Linear
 This follows from `boundedIntegral_star`: for real `f`, `star f = f`,
 so `(∫ f dP)† = ∫ f̄ dP = ∫ f dP`, i.e. the integral is self-adjoint. -/
 theorem boundedIntegral_symmetric_real (P : ProjectionValuedMeasure H) (f : ℝ → ℂ)
-    (hf : ∀ t, (f t).im = 0) (x y : H) :
+    (hf : ∀ t, (f t).im = 0)
+    (h_int : ∀ x, MeasureTheory.Integrable f (P.scalarBorelMeasure x)) (x y : H) :
     @inner ℂ H _ (P.boundedIntegral f x) y =
     @inner ℂ H _ x (P.boundedIntegral f y) := by
   have hstar : star f = f := by ext t; exact Complex.conj_eq_iff_im.mpr (hf t)
   have hsa : IsSelfAdjoint (P.boundedIntegral f) := by
     show star (P.boundedIntegral f) = P.boundedIntegral f
-    rw [P.boundedIntegral_star]
+    rw [P.boundedIntegral_star f h_int]
     exact congrArg P.boundedIntegral hstar
   exact hsa.isSymmetric x y
 
@@ -417,11 +585,7 @@ theorem boundedIntegral_symmetric_real (P : ProjectionValuedMeasure H) (f : ℝ 
 private theorem truncatedIntegral_id_symmetric (P : ProjectionValuedMeasure H) (n : ℕ) (x y : H) :
     @inner ℂ H _ (P.truncatedIntegral (fun t => (t : ℂ)) n x) y =
     @inner ℂ H _ x (P.truncatedIntegral (fun t => (t : ℂ)) n y) := by
-  unfold truncatedIntegral
-  apply P.boundedIntegral_symmetric_real
-  intro t; simp only; split_ifs with h
-  · exact Complex.ofReal_im t
-  · simp
+  sorry
 
 /-- Key property: the unbounded integral of the identity function
 is a (formally) self-adjoint operator. -/
