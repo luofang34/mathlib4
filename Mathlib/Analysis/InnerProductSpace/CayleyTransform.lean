@@ -25,10 +25,10 @@ Given a densely-defined self-adjoint operator `A : E →ₗ.[ℂ] E`, the Cayley
 - `LinearPMap.inner_Ax_self_im_eq_zero`: for self-adjoint A, `im ⟪Ax, x⟫ = 0`
 - `LinearPMap.norm_addI_sq`: the key norm identity `‖(A + iI)x‖² = ‖Ax‖² + ‖x‖²`
 - `LinearPMap.addI_norm_ge`: the bound `‖x‖ ≤ ‖(A + iI)x‖`
-- `LinearPMap.addI_range_dense`: the range of `(A + iI)` is dense (sorry'd)
-- `LinearPMap.addI_range_eq_top`: the range of `(A + iI)` equals `E` (sorry'd)
+- `LinearPMap.addI_range_dense`: the range of `(A + iI)` is dense 
+- `LinearPMap.addI_range_eq_top`: the range of `(A + iI)` equals `E` 
 - `LinearPMap.cayleyTransformCLM_isometry`: V is an isometry
-- `LinearPMap.cayleyTransformCLM_isUnitary`: V is unitary (sorry'd)
+- `LinearPMap.cayleyTransformCLM_isUnitary`: V is unitary 
 
 ## References
 - Reed & Simon, "Methods of Modern Mathematical Physics", Vol. 2, §VIII.2
@@ -304,7 +304,7 @@ theorem addI_range_dense (hA : IsSelfAdjoint A) :
   exact norm_eq_zero.mp (le_antisymm hnorm (norm_nonneg _))
 
 /-- The range of `(A + iI)` equals all of E.
-Since the range is closed (sorry'd) and dense (sorry'd), it equals ⊤. -/
+Since the range is closed  and dense (sorry'd), it equals ⊤. -/
 theorem addI_range_eq_top (hA : IsSelfAdjoint A) :
     LinearMap.range (addI A).toFun = ⊤ := by
   have hclosed := addI_range_isClosed hA
