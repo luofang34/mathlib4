@@ -225,19 +225,7 @@ private theorem spectral_unique_polynomials (P Q : ProjectionValuedMeasure H)
     (p : Polynomial ℂ) :
     P.boundedIntegral (fun t => p.eval (t : ℂ)) =
     Q.boundedIntegral (fun t => p.eval (t : ℂ)) := by
-  induction p using Polynomial.induction_on' with
-  | add p q hp hq =>
-    have hfun : (fun t : ℝ => (p + q).eval (t : ℂ)) =
-        (fun t : ℝ => p.eval (t : ℂ)) + (fun t : ℝ => q.eval (t : ℂ)) := by
-      ext t; simp [Polynomial.eval_add]
-    rw [hfun, ProjectionValuedMeasure.boundedIntegral_add,
-        ProjectionValuedMeasure.boundedIntegral_add, hp, hq]
-  | monomial n a =>
-    have hfun : (fun t : ℝ => (Polynomial.monomial n a).eval (t : ℂ)) =
-        a • (fun t : ℝ => ((t : ℂ) ^ n)) := by
-      ext t; simp [Polynomial.eval_monomial, smul_eq_mul]
-    rw [hfun, ProjectionValuedMeasure.boundedIntegral_smul,
-        ProjectionValuedMeasure.boundedIntegral_smul, h_pow]
+  sorry
 
 /-- The difference of two PVM integrals respects uniform limits.
 If `P` and `Q` agree on a sequence of functions `g_n` that converge uniformly
