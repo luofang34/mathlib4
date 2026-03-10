@@ -573,6 +573,96 @@ private theorem resolvent_addI_integrable (U : StronglyContUnitaryGroup H) (y : 
   filter_upwards [] with t
   rw [h_norm_eq]
 
+
+private lemma set_integral_shift {H : Type*} [NormedAddCommGroup H] [NormedSpace ℝ H] [NormedSpace ℂ H]
+    (f : ℝ → H) (s : ℝ) :
+    ∫ (t : ℝ) in Ioi 0, f (t + s) = ∫ (u : ℝ) in Ioi s, f u := by
+  have h_ind : (fun t => (Ioi 0).indicator (fun x => f (x + s)) t) =
+               (fun t => (Ioi s).indicator f (t + s)) := by
+    ext t
+    by_cases ht : t ∈ Ioi 0
+    · have ht' : t + s ∈ Ioi s := by dsimp [Ioi] at ht ⊢; linarith
+      simp [ht, ht']
+    · have ht' : t + s ∉ Ioi s := by dsimp [Ioi] at ht ⊢; linarith
+      simp [ht, ht']
+  calc ∫ (t : ℝ) in Ioi 0, f (t + s)
+    _ = ∫ t : ℝ, (Ioi 0).indicator (fun x => f (x + s)) t := by rw [integral_indicator measurableSet_Ioi]
+    _ = ∫ t : ℝ, (Ioi s).indicator f (t + s) := by rw [h_ind]
+    _ = ∫ u : ℝ, (Ioi s).indicator f u := integral_add_right_eq_self (fun x => (Ioi s).indicator f x) s
+    _ = ∫ u : ℝ in Ioi s, f u := by rw [integral_indicator measurableSet_Ioi]
+
+private lemma test_resolvent_addI_limit (U : StronglyContUnitaryGroup H) (y : H) :
+    let x_val := resolvent_addI U y
+    Tendsto (fun s : ℝ => (s⁻¹ : ℂ) • Complex.I⁻¹ • (U.toFun s x_val - x_val))
+      (𝓝[≠] (0 : ℝ)) (𝓝 (y - Complex.I • x_val)) := by
+  intro x_val
+  -- 1) Commute U(s) inside x_val = i \int_Ioi(0) e^{-t}U(t)y dt
+  have hU_comm_s : ∀ s : ℝ, U.toFun s x_val = -Complex.I • ∫ (t : ℝ) in Ioi (0 : ℝ), (Real.exp (-t) : ℂ) • (U.toFun (s + t) y) := by
+    intro s
+    dsimp only [x_val]
+    rw [resolvent_addI]
+    have hins : IntegrableOn (fun (t : ℝ) => (Real.exp (-t) : ℂ) • (U.toFun t y)) (Ioi 0) :=
+      resolvent_addI_integrable U y
+    calc
+      (U.toFun s : H →L[ℂ] H) (-Complex.I • ∫ (t : ℝ) in Ioi 0, (Real.exp (-t) : ℂ) • (U.toFun t y))
+        = -Complex.I • (U.toFun s : H →L[ℂ] H) (∫ (t : ℝ) in Ioi 0, (Real.exp (-t) : ℂ) • (U.toFun t y)) :=
+          (U.toFun s : H →L[ℂ] H).map_smul (-Complex.I) _
+      _ = -Complex.I • ∫ (t : ℝ) in Ioi 0, (U.toFun s : H →L[ℂ] H) ((Real.exp (-t) : ℂ) • (U.toFun t y)) := by
+          rw [(U.toFun s : H →L[ℂ] H).integral_comp_comm hins]
+      _ = -Complex.I • ∫ (t : ℝ) in Ioi 0, (Real.exp (-t) : ℂ) • (U.toFun (s + t) y) := by
+          congr 1
+          apply setIntegral_congr_fun measurableSet_Ioi
+          intro t _
+          dsimp only
+          rw [(U.toFun s : H →L[ℂ] H).map_smul, ← ContinuousLinearMap.mul_apply, ← U.map_add s t]
+
+  -- 2) Factor $e^s$ out and Map Integration Bound $\int_0^\infty f(t+s) = \int_s^\infty f(u)$
+  have h_shift : ∀ s : ℝ,
+      ∫ (t : ℝ) in Ioi (0 : ℝ), (Real.exp (-t) : ℂ) • (U.toFun (s + t) y) ∂volume =
+      (Real.exp s : ℂ) • ∫ (u : ℝ) in Ioi s, (Real.exp (-u) : ℂ) • (U.toFun u y) ∂volume := by
+    intro s
+    have h_pull : ∫ (t : ℝ) in Ioi (0 : ℝ), (Real.exp (-t) : ℂ) • (U.toFun (s + t) y) =
+                  ∫ (t : ℝ) in Ioi (0 : ℝ), (Real.exp s : ℂ) • (Real.exp (-(t + s)) : ℂ) • (U.toFun (t + s) y) := by
+      apply setIntegral_congr_fun measurableSet_Ioi
+      intro t _
+      dsimp only
+      rw [add_comm s t]
+      rw [← mul_smul, ← Complex.ofReal_mul, ← Real.exp_add]
+      have h_eq : -t = s + -(t + s) := by ring
+      rw [h_eq]
+    rw [h_pull]
+    rw [integral_smul]
+    have h_subst := set_integral_shift (fun u => (Real.exp (-u) : ℂ) • (U.toFun u y)) s
+    rw [h_subst]
+  -- 3) Substitute \int_s^\infty = \int_0^\infty - \int_0^s -> split Ioi 0 into Ioc 0 s \cup Ioi s natively on e^{-u} U(u)y
+  have h_split : ∀ s : ℝ, 0 < s →
+      ∫ (u : ℝ) in Ioi (0 : ℝ), (Real.exp (-u) : ℂ) • (U.toFun u y) ∂volume =
+      ∫ (u : ℝ) in Ioc (0 : ℝ) s, (Real.exp (-u) : ℂ) • (U.toFun u y) ∂volume +
+      ∫ (u : ℝ) in Ioi s, (Real.exp (-u) : ℂ) • (U.toFun u y) ∂volume := by
+    intro s hs
+    have h_union : Ioi (0 : ℝ) = Ioc (0 : ℝ) s ∪ Ioi s := (Set.Ioc_union_Ioi_eq_Ioi (le_of_lt hs)).symm
+    rw [h_union]
+    have h_disj : Disjoint (Ioc (0 : ℝ) s) (Ioi s) := by
+      rw [Set.disjoint_iff]
+      intro x hx
+      have h1 : x ≤ s := hx.1.2
+      have h2 : s < x := hx.2
+      linarith
+    have h_meas : MeasurableSet (Ioi s) := measurableSet_Ioi
+    have h_int1 : IntegrableOn (fun (u : ℝ) => (Real.exp (-u) : ℂ) • (U.toFun u y)) (Ioc (0 : ℝ) s) := sorry
+    have h_int2 : IntegrableOn (fun (u : ℝ) => (Real.exp (-u) : ℂ) • (U.toFun u y)) (Ioi s) := sorry
+    exact setIntegral_union h_disj h_meas h_int1 h_int2
+
+  -- 4) Difference Equation: U(s)x_val - x_val
+  have h_diff : ∀ s : ℝ, 0 < s →
+      U.toFun s x_val - x_val =
+      ((Real.exp s : ℂ) - 1) • x_val + (Complex.I * (Real.exp s : ℂ)) • ∫ (u : ℝ) in Ioc (0 : ℝ) s, (Real.exp (-u) : ℂ) • (U.toFun u y) ∂volume := by
+    intro s hs
+    sorry
+
+  -- 5) Continuous Differentiability Limit (FTC)
+  sorry
+
 private theorem stoneGenerator_addI_surjective (U : StronglyContUnitaryGroup H) (y : H) :
     ∃ x : stoneGeneratorDomain U,
       (stoneGenerator U x : H) + Complex.I • (x : H) = y := by
@@ -583,23 +673,22 @@ private theorem stoneGenerator_addI_surjective (U : StronglyContUnitaryGroup H) 
   -- The domain of the Stone generator A is defined via the limit:
   -- Tendsto (t ↦ (t⁻¹ * I⁻¹) (U(t)x - x)) (𝓝[≠] 0) Ax
   have h_limit : Tendsto (fun s : ℝ => (s⁻¹ : ℂ) • Complex.I⁻¹ • (U.toFun s x_val - x_val))
-    (𝓝[≠] (0 : ℝ)) (𝓝 ((-Complex.I) • (y - Complex.I • x_val))) := by
-    sorry
+    (𝓝[≠] (0 : ℝ)) (𝓝 (y - Complex.I • x_val)) := by
+    exact test_resolvent_addI_limit U y
 
   have h_mem : x_val ∈ stoneGeneratorDomain U := by
     -- By definition, x ∈ dom(A) iff the limit of (U(s)x - x)/s exists at s=0
-    -- Our h_limit explicitly proves this limit exists and equals -I*(y - I*x_val)
-    exact ⟨(-Complex.I) • (y - Complex.I • x_val), h_limit⟩
+    -- Our h_limit explicitly proves this limit exists and equals y - I*x_val
+    exact ⟨y - Complex.I • x_val, h_limit⟩
 
   use ⟨x_val, h_mem⟩
   -- Now we must show A(x_val) + i x_val = y
   -- We extract the limit evaluating A(x) from h_limit via the generator definition.
-  have hA : (stoneGenerator U ⟨x_val, h_mem⟩ : H) = (-Complex.I) • (y - Complex.I • x_val) :=
+  have hA : (stoneGenerator U ⟨x_val, h_mem⟩ : H) = y - Complex.I • x_val :=
     tendsto_nhds_unique h_mem.choose_spec h_limit
   erw [hA]
-  -- Algebraic simplification: -i(y - i x) + i x = -iy - x + ix = y
-  simp [smul_smul, smul_sub]
-  sorry
+  -- Algebraic simplification: (y - i x) + i x = y
+  rw [sub_add_cancel]
 
 /-- Range of (A + iI) is dense, where A is the Stone generator.
 This follows from `stoneGenerator_addI_surjective`, which shows the range is all of H. -/
@@ -649,18 +738,17 @@ private theorem stoneGenerator_subI_surjective (U : StronglyContUnitaryGroup H) 
     resolvent_subI_integrable U y
 
   have h_limit : Tendsto (fun s : ℝ => (s⁻¹ : ℂ) • Complex.I⁻¹ • (U.toFun s x_val - x_val))
-    (𝓝[≠] (0 : ℝ)) (𝓝 (Complex.I • (y + Complex.I • x_val))) := by
+    (𝓝[≠] (0 : ℝ)) (𝓝 (y + Complex.I • x_val)) := by
     sorry
 
   have h_mem : x_val ∈ stoneGeneratorDomain U := by
-    exact ⟨Complex.I • (y + Complex.I • x_val), h_limit⟩
+    exact ⟨y + Complex.I • x_val, h_limit⟩
 
   use ⟨x_val, h_mem⟩
-  have hA : (stoneGenerator U ⟨x_val, h_mem⟩ : H) = Complex.I • (y + Complex.I • x_val) :=
+  have hA : (stoneGenerator U ⟨x_val, h_mem⟩ : H) = y + Complex.I • x_val :=
     tendsto_nhds_unique h_mem.choose_spec h_limit
   erw [hA]
-  simp [smul_smul, smul_add]
-  sorry
+  rw [add_sub_cancel_right]
 
 /-- The Stone generator is symmetric in the sense of `IsFormalAdjoint`. -/
 private theorem stoneGenerator_isFormalAdjoint (U : StronglyContUnitaryGroup H) :
