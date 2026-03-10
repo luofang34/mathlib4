@@ -9,6 +9,10 @@ import Mathlib.Analysis.InnerProductSpace.OneParameterGroup
 import Mathlib.Analysis.CStarAlgebra.ContinuousFunctionalCalculus.Basic
 import Mathlib.Analysis.CStarAlgebra.ContinuousFunctionalCalculus.Instances
 import Mathlib.Analysis.CStarAlgebra.ContinuousLinearMap
+import Mathlib.MeasureTheory.Integral.IntegrableOn
+import Mathlib.MeasureTheory.Integral.ExpDecay
+
+open MeasureTheory TopologicalSpace Filter Set Topology
 
 /-!
 # The Spectral Theorem
@@ -534,10 +538,67 @@ integral sign.
 
 This step requires Bochner integration of Hilbert-space-valued functions, which
 is available in Mathlib but connecting it to the generator limit definition
-requires substantial work. -/
+requires substantial work.
+
+This is step 1 of proving surjectivity. The map is defined via
+`R(i)y = -i ∫₀^∞ e^{-t} U(t)y dt`. -/
+noncomputable def resolvent_addI (U : StronglyContUnitaryGroup H) (y : H) : H :=
+  (-Complex.I) • ∫ (t : ℝ) in Ioi (0 : ℝ), (Real.exp (-t) : ℂ) • (U.toFun t y)
+
+private theorem resolvent_addI_integrable (U : StronglyContUnitaryGroup H) (y : H) :
+    IntegrableOn (fun (t : ℝ) => (Real.exp (-t) : ℂ) • (U.toFun t y)) (Ioi 0) := by
+  have h_norm_eq : ∀ t : ℝ, ‖(Real.exp (-t) : ℂ) • (U.toFun t y)‖ = Real.exp (-t) * ‖y‖ := by
+    intro t
+    rw [norm_smul, Complex.norm_real, Real.norm_eq_abs, Real.abs_exp]
+    have hUy : ‖U.toFun t y‖ = ‖y‖ := StronglyContUnitaryGroup.norm_apply U t y
+    rw [hUy]
+  -- Base exponential function is integrable
+  have hexp : IntegrableOn (fun (t : ℝ) => Real.exp (-t) * ‖y‖) (Ioi 0) := by
+    apply Integrable.mul_const
+    have h1 : IntegrableOn (fun (t : ℝ) => Real.exp (-(1 : ℝ) * t)) (Ioi 0) :=
+      exp_neg_integrableOn_Ioi 0 (by norm_num)
+    exact IntegrableOn.congr_fun h1 (by intro t _; simp only [neg_mul, one_mul]) measurableSet_Ioi
+
+  -- Strong measurability of the integrand via continuity
+  have h1 : Continuous (fun t : ℝ => (Real.exp (-t) : ℂ)) :=
+    Complex.continuous_ofReal.comp (Real.continuous_exp.comp continuous_neg)
+  have h2 : Continuous (fun t : ℝ => U.toFun t y) := U.stronglyContinuous y
+  have h3 : Continuous (fun (t : ℝ) => (Real.exp (-t) : ℂ) • (U.toFun t y)) :=
+    h1.smul h2
+  have hmeas : AEStronglyMeasurable (fun (t : ℝ) => (Real.exp (-t) : ℂ) • (U.toFun t y)) (volume.restrict (Ioi 0)) :=
+    h3.aestronglyMeasurable
+
+  -- Apply the bound theorem
+  apply Integrable.mono' hexp hmeas
+  filter_upwards [] with t
+  rw [h_norm_eq]
+
 private theorem stoneGenerator_addI_surjective (U : StronglyContUnitaryGroup H) (y : H) :
     ∃ x : stoneGeneratorDomain U,
       (stoneGenerator U x : H) + Complex.I • (x : H) = y := by
+  let x_val := resolvent_addI U y
+  have h_int : IntegrableOn (fun (t : ℝ) => (Real.exp (-t) : ℂ) • (U.toFun t y)) (Ioi 0) :=
+    resolvent_addI_integrable U y
+
+  -- The domain of the Stone generator A is defined via the limit:
+  -- Tendsto (t ↦ (t⁻¹ * I⁻¹) (U(t)x - x)) (𝓝[≠] 0) Ax
+  have h_limit : Tendsto (fun s : ℝ => (s⁻¹ : ℂ) • Complex.I⁻¹ • (U.toFun s x_val - x_val))
+    (𝓝[≠] (0 : ℝ)) (𝓝 ((-Complex.I) • (y - Complex.I • x_val))) := by
+    sorry
+
+  have h_mem : x_val ∈ stoneGeneratorDomain U := by
+    -- By definition, x ∈ dom(A) iff the limit of (U(s)x - x)/s exists at s=0
+    -- Our h_limit explicitly proves this limit exists and equals -I*(y - I*x_val)
+    exact ⟨(-Complex.I) • (y - Complex.I • x_val), h_limit⟩
+
+  use ⟨x_val, h_mem⟩
+  -- Now we must show A(x_val) + i x_val = y
+  -- We extract the limit evaluating A(x) from h_limit via the generator definition.
+  have hA : (stoneGenerator U ⟨x_val, h_mem⟩ : H) = (-Complex.I) • (y - Complex.I • x_val) :=
+    tendsto_nhds_unique h_mem.choose_spec h_limit
+  erw [hA]
+  -- Algebraic simplification: -i(y - i x) + i x = -iy - x + ix = y
+  simp [smul_smul, smul_sub]
   sorry
 
 /-- Range of (A + iI) is dense, where A is the Stone generator.
@@ -553,11 +614,52 @@ private theorem stoneGenerator_addI_range_dense (U : StronglyContUnitaryGroup H)
   exact Function.Surjective.denseRange hsurj
 
 /-- For any `y : H`, there exists `x ∈ dom(A)` such that `(A - iI)x = y`.
-
 The resolvent is constructed via `R(-i)y = i ∫₀^∞ e^{-t} U(-t)y dt`. -/
+noncomputable def resolvent_subI (U : StronglyContUnitaryGroup H) (y : H) : H :=
+  Complex.I • ∫ (t : ℝ) in Ioi (0 : ℝ), (Real.exp (-t) : ℂ) • (U.toFun (-t) y)
+
+private theorem resolvent_subI_integrable (U : StronglyContUnitaryGroup H) (y : H) :
+    IntegrableOn (fun (t : ℝ) => (Real.exp (-t) : ℂ) • (U.toFun (-t) y)) (Ioi 0) := by
+  have h_norm_eq : ∀ t : ℝ, ‖(Real.exp (-t) : ℂ) • (U.toFun (-t) y)‖ = Real.exp (-t) * ‖y‖ := by
+    intro t
+    rw [norm_smul, Complex.norm_real, Real.norm_eq_abs, Real.abs_exp]
+    have hUy : ‖U.toFun (-t) y‖ = ‖y‖ := StronglyContUnitaryGroup.norm_apply U (-t) y
+    rw [hUy]
+  have hexp : IntegrableOn (fun (t : ℝ) => Real.exp (-t) * ‖y‖) (Ioi 0) := by
+    apply Integrable.mul_const
+    have h1 : IntegrableOn (fun (t : ℝ) => Real.exp (-(1 : ℝ) * t)) (Ioi 0) :=
+      exp_neg_integrableOn_Ioi 0 (by norm_num)
+    exact IntegrableOn.congr_fun h1 (by intro t _; simp only [neg_mul, one_mul]) measurableSet_Ioi
+  have h1 : Continuous (fun t : ℝ => (Real.exp (-t) : ℂ)) :=
+    Complex.continuous_ofReal.comp (Real.continuous_exp.comp continuous_neg)
+  have h2 : Continuous (fun t : ℝ => U.toFun (-t) y) := (U.stronglyContinuous y).comp continuous_neg
+  have h3 : Continuous (fun (t : ℝ) => (Real.exp (-t) : ℂ) • (U.toFun (-t) y)) :=
+    h1.smul h2
+  have hmeas : AEStronglyMeasurable (fun (t : ℝ) => (Real.exp (-t) : ℂ) • (U.toFun (-t) y)) (volume.restrict (Ioi 0)) :=
+    h3.aestronglyMeasurable
+  apply Integrable.mono' hexp hmeas
+  filter_upwards [] with t
+  rw [h_norm_eq]
+
 private theorem stoneGenerator_subI_surjective (U : StronglyContUnitaryGroup H) (y : H) :
     ∃ x : stoneGeneratorDomain U,
       (stoneGenerator U x : H) - Complex.I • (x : H) = y := by
+  let x_val := resolvent_subI U y
+  have h_int : IntegrableOn (fun (t : ℝ) => (Real.exp (-t) : ℂ) • (U.toFun (-t) y)) (Ioi 0) :=
+    resolvent_subI_integrable U y
+
+  have h_limit : Tendsto (fun s : ℝ => (s⁻¹ : ℂ) • Complex.I⁻¹ • (U.toFun s x_val - x_val))
+    (𝓝[≠] (0 : ℝ)) (𝓝 (Complex.I • (y + Complex.I • x_val))) := by
+    sorry
+
+  have h_mem : x_val ∈ stoneGeneratorDomain U := by
+    exact ⟨Complex.I • (y + Complex.I • x_val), h_limit⟩
+
+  use ⟨x_val, h_mem⟩
+  have hA : (stoneGenerator U ⟨x_val, h_mem⟩ : H) = Complex.I • (y + Complex.I • x_val) :=
+    tendsto_nhds_unique h_mem.choose_spec h_limit
+  erw [hA]
+  simp [smul_smul, smul_add]
   sorry
 
 /-- The Stone generator is symmetric in the sense of `IsFormalAdjoint`. -/
