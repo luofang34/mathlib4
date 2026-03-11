@@ -9,8 +9,10 @@ import Mathlib.Analysis.InnerProductSpace.OneParameterGroup
 import Mathlib.Analysis.CStarAlgebra.ContinuousFunctionalCalculus.Basic
 import Mathlib.Analysis.CStarAlgebra.ContinuousFunctionalCalculus.Instances
 import Mathlib.Analysis.CStarAlgebra.ContinuousLinearMap
+import Mathlib.LinearAlgebra.Complex.Module
 import Mathlib.MeasureTheory.Integral.IntegrableOn
 import Mathlib.MeasureTheory.Integral.ExpDecay
+import Mathlib.MeasureTheory.Integral.RieszMarkovKakutani.Real
 
 open MeasureTheory TopologicalSpace Filter Set Topology
 
@@ -92,16 +94,69 @@ but connecting it to the operator-valued setting requires additional work. -/
 theorem riesz_markov_for_operator_functional
     (K : Set ℝ) [CompactSpace K]
     (Φ : C(K, ℝ) →⋆ₐ[ℝ] (H →L[ℂ] H))
-    (hΦ_cont : Continuous Φ) (x : H) :
+    (_hΦ_cont : Continuous Φ) (x : H) :
     ∃ μ : MeasureTheory.Measure K,
       ∀ f : C(K, ℝ), Complex.re (@inner ℂ H _ x (Φ f x)) =
         ∫ t, f t ∂μ := by
-  sorry
+  let Λ : CompactlySupportedContinuousMap K ℝ →ₚ[ℝ] ℝ :=
+    PositiveLinearMap.mk₀
+      { toFun := fun f =>
+          Complex.re (@inner ℂ H _ x (Φ (f : C(K, ℝ)) x))
+        map_add' := by
+          intro f g
+          calc
+            Complex.re (@inner ℂ H _ x (Φ ((f + g : CompactlySupportedContinuousMap K ℝ) :
+              C(K, ℝ)) x))
+              = Complex.re (@inner ℂ H _ x (Φ ((f : C(K, ℝ)) + g) x)) := by rfl
+            _ = Complex.re (@inner ℂ H _ x (Φ (f : C(K, ℝ)) x)) +
+                Complex.re (@inner ℂ H _ x (Φ (g : C(K, ℝ)) x)) := by
+                  rw [map_add, ContinuousLinearMap.add_apply, inner_add_right, Complex.add_re]
+        map_smul' := by
+          intro c f
+          calc
+            Complex.re (@inner ℂ H _ x (Φ ((c • f : CompactlySupportedContinuousMap K ℝ) :
+              C(K, ℝ)) x))
+              = Complex.re (@inner ℂ H _ x (Φ (c • (f : C(K, ℝ))) x)) := by rfl
+            _ = c * Complex.re (@inner ℂ H _ x (Φ (f : C(K, ℝ)) x)) := by
+              rw [map_smul, ← Complex.coe_smul c (Φ (f : C(K, ℝ))),
+                ContinuousLinearMap.smul_apply, inner_smul_right]
+              simpa using RCLike.smul_re c (@inner ℂ H _ x (Φ (f : C(K, ℝ)) x)) }
+      (fun f hf => by
+        have hf_c : ∀ t, 0 ≤ f t := by
+          simpa [CompactlySupportedContinuousMap.le_def] using hf
+        have hf' : 0 ≤ (f : C(K, ℝ)) := by
+          rw [ContinuousMap.le_def]
+          intro t
+          exact hf_c t
+        have hmem :
+            (f : C(K, ℝ)) ∈ AddSubmonoid.closure
+              (Set.range fun s : C(K, ℝ) => star s * s) :=
+          (StarOrderedRing.nonneg_iff).mp hf'
+        exact AddSubmonoid.closure_induction
+          (motive := fun g _ => 0 ≤ Complex.re (@inner ℂ H _ x (Φ g x)))
+          (fun g hg => by
+            rcases hg with ⟨h, rfl⟩
+            rw [map_mul, map_star, ContinuousLinearMap.mul_apply,
+              ContinuousLinearMap.star_eq_adjoint,
+              ContinuousLinearMap.adjoint_inner_right]
+            change 0 ≤ Complex.re (@inner ℂ H _ ((Φ h) x) ((Φ h) x))
+            exact inner_self_nonneg (𝕜 := ℂ) (x := (Φ h) x))
+          (by simp)
+          (fun g h _ _ hg hh => by
+            simpa [map_add, ContinuousLinearMap.add_apply, inner_add_right, Complex.add_re] using
+              add_nonneg hg hh)
+          hmem)
+  refine ⟨RealRMK.rieszMeasure Λ, ?_⟩
+  intro f
+  simpa [Λ] using
+    (RealRMK.integral_rieszMeasure
+      (Λ := Λ) (CompactlySupportedContinuousMap.continuousMapEquiv f)).symm
 
 /-- **Step 3 (key sorry)**: From scalar measures to a projection-valued measure.
 
 Given a *-homomorphism `Φ : C(K, ℝ) →⋆ₐ[ℝ] B(H)`, there exists a PVM `P` on `ℝ` with
-support in `K` such that `Φ(f) = ∫_K f dP` for every continuous `f : K → ℝ`.
+support in `K` such that
+`Φ(g.restrict K) = ∫ g dP` for every continuous `g : ℝ → ℝ`.
 
 The construction proceeds by:
 (a) For each `x`, use Riesz-Markov to get a scalar measure `μ_x`.
@@ -114,7 +169,7 @@ theorem starAlgHom_to_pvm
     (Φ : C(K, ℝ) →⋆ₐ[ℝ] (H →L[ℂ] H))
     (hΦ_cont : Continuous Φ) :
     ∃ P : ProjectionValuedMeasure H,
-      ∀ f : C(K, ℝ), Φ f = P.boundedIntegral (fun t => (f ⟨t, sorry⟩ : ℂ)) := by
+      ∀ g : C(ℝ, ℝ), Φ (g.restrict K) = P.boundedIntegral (fun t => (g t : ℂ)) := by
   sorry
 
 /-- **Step 4**: The PVM integral of `id` recovers the operator.
@@ -123,10 +178,14 @@ Given the PVM `P` from `starAlgHom_to_pvm` applied to `cfcHom`, we have
 `Φ(id) = ∫ id dP = A`, so `A = pvm_id_integral P`. -/
 theorem cfc_pvm_integral_eq (A : H →L[ℂ] H) (hA : IsSelfAdjoint A)
     (P : ProjectionValuedMeasure H)
-    (hP : ∀ f : C(spectrum ℝ A, ℝ),
-      cfcHom hA f = P.boundedIntegral (fun t => (f ⟨t, sorry⟩ : ℂ))) :
+    (hP : ∀ g : C(ℝ, ℝ),
+      cfcHom hA (g.restrict (spectrum ℝ A)) = P.boundedIntegral (fun t => (g t : ℂ))) :
     A = pvm_id_integral P := by
-  sorry
+  calc
+    A = cfcHom hA ((ContinuousMap.id ℝ).restrict (spectrum ℝ A)) :=
+      (cfcHom_id hA).symm
+    _ = pvm_id_integral P := by
+      simpa [pvm_id_integral] using hP (ContinuousMap.id ℝ)
 
 /-- **Spectral theorem (bounded case)**: Every bounded self-adjoint operator
 has a projection-valued measure such that A = ∫ λ dP(λ).
